@@ -84,7 +84,26 @@ public class InMemoryMatchService implements MatchService {
     private final Map<String, Match> matches = new ConcurrentHashMap<>();
     private final AtomicLong seedCounter = new AtomicLong(0xCAFEBABEL);
 
+    /**
+     * Optional post-commit hook for the live WebSocket stream (E6-04). Null when no
+     * broker is wired (e.g. the MockMvc REST tests), in which case ticks resolve exactly
+     * as before. Injected by Spring when a {@link TickListener} bean is present; the
+     * transport layer depends on the service, never the reverse.
+     */
+    private volatile TickListener tickListener;
+
     public InMemoryMatchService() {
+    }
+
+    /**
+     * Spring setter-injects the live-stream publisher when one exists. Optional so the
+     * service stays usable headless and the existing tests construct it no-arg. The
+     * listener is invoked once per committed tick under the match lock; see
+     * {@link #resolveOneTick}.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTickListener(TickListener tickListener) {
+        this.tickListener = tickListener;
     }
 
     // ===== lifecycle ===========================================================
@@ -272,10 +291,20 @@ public class InMemoryMatchService implements MatchService {
         match.appendEvents(tick, result.events());
 
         GameState resolved = result.state();
-        if (resolved.status() == GameStatus.CONCLUDED) {
-            match.setState(resolved);
-        } else {
-            match.setState(resolved.withTick(tick + 1));
+        GameState committed = resolved.status() == GameStatus.CONCLUDED
+                ? resolved
+                : resolved.withTick(tick + 1);
+        match.setState(committed);
+
+        // E6-04: notify the live stream of the just-committed tick. Best-effort and
+        // non-fatal - a publisher failure must never derail the deterministic tick loop.
+        TickListener listener = tickListener;
+        if (listener != null) {
+            try {
+                listener.onTickCommitted(match.id(), committed, match.adjacency(), result.events());
+            } catch (RuntimeException e) {
+                LOG.warn("tick listener failed for match {} (continuing)", match.id(), e);
+            }
         }
     }
 

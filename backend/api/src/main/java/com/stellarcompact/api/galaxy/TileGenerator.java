@@ -1,12 +1,10 @@
 package com.stellarcompact.api.galaxy;
 
+import com.stellarcompact.galaxy.gen.CatalogGenerator;
+import com.stellarcompact.galaxy.gen.CatalogStar;
 import com.stellarcompact.galaxy.gen.Cell;
 import com.stellarcompact.galaxy.gen.GalaxyConstants;
 import com.stellarcompact.galaxy.gen.SpiralDensityField;
-import com.stellarcompact.galaxy.gen.Star;
-import com.stellarcompact.galaxy.gen.StarFieldGenerator;
-import com.stellarcompact.galaxy.gen.StarSystem;
-import com.stellarcompact.galaxy.gen.SystemGenerator;
 
 import org.springframework.stereotype.Component;
 
@@ -21,8 +19,8 @@ import java.util.List;
  * inputs yield a byte-identical payload on every call and JVM. The HTTP layer is
  * the only place caching headers (ETag, long TTL) are applied.
  *
- * <p>Read-only against galaxy: this calls {@link StarFieldGenerator},
- * {@link SystemGenerator} and {@link SpiralDensityField}; it does not modify them.
+ * <p>Read-only against galaxy: this calls {@link CatalogGenerator} (E8-03's
+ * shared per-cell facade) and {@link SpiralDensityField}; it does not modify them.
  *
  * <p>Active-system promotion ({@code activeSystemId}) is the concern of E2-05/
  * E6-01; until that is wired, every scenery star reports {@code null}. The thin
@@ -103,10 +101,12 @@ public class TileGenerator {
 
     /**
      * Fine star list: enumerate the procedural-grid cells overlapping the tile
-     * bbox, generate their stars (seeded) and keep those whose position lands
-     * inside the bbox. Each kept star is enriched with its seed-derived spectral/
-     * brightness/size via {@link SystemGenerator}. Bounded by the tile size
-     * (fine tiles cover a tiny region), so this never iterates the catalog.
+     * bbox, generate their fully-derived catalog stars via the shared
+     * {@link CatalogGenerator} (E8-03) and keep those whose position lands inside
+     * the bbox. Using the same per-cell facade the TypeScript client mirrors keeps
+     * tile output parity-locked to client-side scenery (one join, no drift).
+     * Bounded by the tile size (fine tiles cover a tiny region), so this never
+     * iterates the catalog.
      */
     private TilePayload starList(long gameSeed, int level, int x, int y,
                                  TileGrid.Bbox bbox) {
@@ -119,18 +119,15 @@ public class TileGenerator {
         List<TilePayload.StarListTile.StarDto> stars = new ArrayList<>();
         for (int cy = cMinY; cy <= cMaxY; cy++) {
             for (int cx = cMinX; cx <= cMaxX; cx++) {
-                List<Star> cellStars =
-                        StarFieldGenerator.generate(gameSeed, new Cell(cx, cy));
-                for (Star s : cellStars) {
-                    double px = s.pos().x();
-                    double py = s.pos().y();
-                    if (!bbox.contains(px, py)) {
+                List<CatalogStar> cellStars =
+                        CatalogGenerator.generateCell(gameSeed, new Cell(cx, cy));
+                for (CatalogStar s : cellStars) {
+                    if (!bbox.contains(s.x(), s.y())) {
                         continue;
                     }
-                    StarSystem sys = SystemGenerator.generate(gameSeed, s.id());
                     stars.add(new TilePayload.StarListTile.StarDto(
-                            s.id(), px, py, sys.spectral().name(),
-                            sys.brightness(), sys.size(),
+                            s.id(), s.x(), s.y(), s.spectral().name(),
+                            s.brightness(), s.size(),
                             // E2-05/E6-01 promotion not yet wired: scenery only.
                             null));
                 }

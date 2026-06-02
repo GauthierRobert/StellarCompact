@@ -45,7 +45,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 ## E4 — LLM agent runtime + orchestration (Phase 2)
 - ✅ **E4-01** ChatClient integration (Ollama default, pluggable) — *deps: E3-01* — agent-runtime-developer
 - ✅ **E4-02** Prompt assembly (persona+goals+rules+schema+example) — *deps: E4-01, E3-02* — agent-runtime-developer
-- ☐ **E4-03** 🔒 Structured-output coercion + defensive parse — *deps: E4-02, E1-02* — agent-runtime-developer
+- ✅ **E4-03** 🔒 Structured-output coercion + defensive parse — *deps: E4-02, E1-02* — agent-runtime-developer
 - ☐ **E4-04** 🔒 Validate-after-parse + single re-prompt → Hold — *deps: E4-03, E1-04* — agent-runtime-developer
 - ☐ **E4-05** Tick orchestrator (4 phases, virtual threads, timeouts) — *deps: E4-04, E1-05* — agent-runtime-developer
 - ☐ **E4-06** Negotiation phase (rounds, messages, pending proposals) — *deps: E4-05* — agent-runtime-developer
@@ -65,7 +65,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E7-01** Signal stores (camera + game state) — *deps: E0-02* — frontend-developer
 - ✅ **E7-02** Canvas galaxy renderer (PoC port) — *deps: E7-01, E6-03* — galaxy-renderer-engineer
 - ☐ **E7-03** STOMP client → signals — *deps: E7-01, E6-04* — frontend-developer
-- ☐ **E7-04** HUD & panels — *deps: E7-01* — frontend-developer
+- ✅ **E7-04** HUD & panels — *deps: E7-01* — frontend-developer
 - ☐ **E7-05** Sovereign config screens — *deps: E6-02* — frontend-developer
 - ☐ **E7-06** Spectator view & public event feed — *deps: E7-02, E7-03* — frontend-developer
 

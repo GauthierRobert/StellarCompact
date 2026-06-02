@@ -338,7 +338,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** prompt is assembled from config + WorldView; token budget respected; persona/constraints injected; golden prompt test.
 
 ### E4-03 · Structured-output coercion + defensive parse
-- **Status:** ☐ Todo · **Module:** agent-runtime · **Depends on:** E4-02, E1-02 · **Delegate to:** agent-runtime-developer · 🔒
+- **Status:** ✅ Done · **Module:** agent-runtime · **Depends on:** E4-02, E1-02 · **Delegate to:** agent-runtime-developer · 🔒
 - **Read first:** `docs/specs/agent-io-schema.md` §5, `.claude/skills/spring-ai-agent`
 - **Do:** Use Spring AI structured-output/converter to coerce to `AgentResponse`. Defensive parsing: strip markdown
   fences, tolerate trailing prose, **reject ambiguous output**. Never trust model self-reported validity.
@@ -450,7 +450,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** live events/overlay update the UI reactively; reconnect resyncs without a full reload.
 
 ### E7-04 · HUD & panels
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E7-01 · **Delegate to:** frontend-developer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E7-01 · **Delegate to:** frontend-developer
 - **Read first:** `.claude/skills/angular21-signals`, `docs/game-design/01-world-and-map.md` §5
 - **Do:** Signal-driven HUD: resource/influence/reputation readouts, selected-system/planet panels, scale-tier-aware
   action surfacing (display only — humans don't micromanage).

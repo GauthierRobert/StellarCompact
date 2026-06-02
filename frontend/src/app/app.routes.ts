@@ -9,9 +9,7 @@ export const routes: Routes = [
   {
     path: 'galaxy',
     loadComponent: () =>
-      import('./features/galaxy/galaxy.component').then(
-        (m) => m.GalaxyComponent,
-      ),
+      import('./features/hud/hud.component').then((m) => m.HudComponent),
   },
   {
     path: 'config',

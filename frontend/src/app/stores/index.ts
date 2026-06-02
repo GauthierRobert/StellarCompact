@@ -38,3 +38,10 @@ export type {
   RouteOverlay,
   OverlayDelta,
 } from './overlay.store';
+
+export { SelectionStore } from './selection.store';
+export type {
+  ScaleTier,
+  SelectedSystemInfo,
+  SelectedPlanetInfo,
+} from './selection.store';

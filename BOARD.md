@@ -152,7 +152,7 @@ client/agent-visible read (flagged 🔒 below).
   human-readable (they feed the agent re-prompt).
 
 ### E1-05 · Resolver skeleton (fixed resolution order)
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-03, E1-04 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-03, E1-04 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/03-actions.md` §"Resolution order", `.claude/skills/game-engine-determinism`
 - **Do:** `resolve(state, validatedActions, seed)` — **single-threaded, pure**. Orders actions by the fixed 11-step
   category order, then faction id, then submission order. Exhaustive `switch`; dispatches to per-step handlers (stubs ok).

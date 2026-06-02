@@ -16,7 +16,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E1-02** 🔒 Sealed Action hierarchy (25 variants) + AgentResponse — *deps: E1-01* — game-engine-developer
 - ✅ **E1-03** Seeded RNG (gameSeed ⊕ tick ⊕ localSalt) — *deps: E0-01* — game-engine-developer
 - ✅ **E1-04** 🔒 Action validation (Valid|Rejected{reason}) — *deps: E1-01, E1-02* — game-engine-developer
-- ☐ **E1-05** Resolver skeleton (fixed 11-step order) — *deps: E1-03, E1-04* — game-engine-developer
+- ✅ **E1-05** Resolver skeleton (fixed 11-step order) — *deps: E1-03, E1-04* — game-engine-developer
 - ☐ **E1-06** Economy: production/upkeep/deficit attrition/population — *deps: E1-05, E0-03* — game-engine-developer
 - ☐ **E1-07** Market order book + escrow (price-time priority) — *deps: E1-05* — game-engine-developer
 - ☐ **E1-08** Construction + tech DAG + terraform — *deps: E1-05* — game-engine-developer

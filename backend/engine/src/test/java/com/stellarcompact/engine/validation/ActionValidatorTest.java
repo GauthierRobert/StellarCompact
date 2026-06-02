@@ -692,18 +692,31 @@ class ActionValidatorTest {
     // ===== Attack =============================================================
 
     @Test
-    void attackEnemySystemNoTreatyValid() {
-        assertValid(validate(new Action.Attack(FLEET_A, new AttackTarget.OnSystem(SYS_B))));
+    void attackEnemySystemAtWarValid() {
+        GameState war = Fixtures.baseStateAtWar(ALPHA, BETA);
+        assertValid(ActionValidator.validate(war, ALPHA,
+                new Action.Attack(FLEET_A, new AttackTarget.OnSystem(SYS_B)), PROFILE));
     }
 
     @Test
     void attackNeutralSystemValid() {
+        // A neutral (unowned) target needs no war state.
         assertValid(validate(new Action.Attack(FLEET_A, new AttackTarget.OnSystem(SYS_NEUTRAL))));
     }
 
     @Test
-    void attackEnemyFleetNoTreatyValid() {
-        assertValid(validate(new Action.Attack(FLEET_A, new AttackTarget.OnFleet(FLEET_B))));
+    void attackEnemyFleetAtWarValid() {
+        GameState war = Fixtures.baseStateAtWar(ALPHA, BETA);
+        assertValid(ActionValidator.validate(war, ALPHA,
+                new Action.Attack(FLEET_A, new AttackTarget.OnFleet(FLEET_B)), PROFILE));
+    }
+
+    @Test
+    void attackOwnedTargetWithoutWarRejectedNotAtWar() {
+        // E1-12: absence of a forbidding treaty is necessary but not sufficient - an
+        // owned target requires a positive war state.
+        assertRejected(validate(new Action.Attack(FLEET_A, new AttackTarget.OnSystem(SYS_B))),
+                RejectionReason.NOT_AT_WAR);
     }
 
     @Test
@@ -752,13 +765,23 @@ class ActionValidatorTest {
     // ===== Blockade ===========================================================
 
     @Test
-    void blockadeEnemyRouteValid() {
-        assertValid(validate(new Action.Blockade(FLEET_A, new BlockadeTarget.OnRoute(ROUTE_B))));
+    void blockadeEnemyRouteAtWarValid() {
+        GameState war = Fixtures.baseStateAtWar(ALPHA, BETA);
+        assertValid(ActionValidator.validate(war, ALPHA,
+                new Action.Blockade(FLEET_A, new BlockadeTarget.OnRoute(ROUTE_B)), PROFILE));
     }
 
     @Test
-    void blockadeEnemySystemValid() {
-        assertValid(validate(new Action.Blockade(FLEET_A, new BlockadeTarget.OnSystem(SYS_B))));
+    void blockadeEnemySystemAtWarValid() {
+        GameState war = Fixtures.baseStateAtWar(ALPHA, BETA);
+        assertValid(ActionValidator.validate(war, ALPHA,
+                new Action.Blockade(FLEET_A, new BlockadeTarget.OnSystem(SYS_B)), PROFILE));
+    }
+
+    @Test
+    void blockadeOwnedTargetWithoutWarRejectedNotAtWar() {
+        assertRejected(validate(new Action.Blockade(FLEET_A, new BlockadeTarget.OnRoute(ROUTE_B))),
+                RejectionReason.NOT_AT_WAR);
     }
 
     @Test
@@ -794,8 +817,15 @@ class ActionValidatorTest {
     // ===== Raid ===============================================================
 
     @Test
-    void raidEnemyRouteValid() {
-        assertValid(validate(new Action.Raid(FLEET_A, ROUTE_B)));
+    void raidEnemyRouteAtWarValid() {
+        GameState war = Fixtures.baseStateAtWar(ALPHA, BETA);
+        assertValid(ActionValidator.validate(war, ALPHA, new Action.Raid(FLEET_A, ROUTE_B), PROFILE));
+    }
+
+    @Test
+    void raidOwnedRouteWithoutWarRejectedNotAtWar() {
+        // A route always has an owner, so raiding always requires a positive war state.
+        assertRejected(validate(new Action.Raid(FLEET_A, ROUTE_B)), RejectionReason.NOT_AT_WAR);
     }
 
     @Test

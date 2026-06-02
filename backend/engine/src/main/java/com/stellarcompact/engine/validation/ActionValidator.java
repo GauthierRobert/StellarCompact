@@ -595,10 +595,18 @@ public final class ActionValidator {
                                 + ") forbids attacking " + targetOwner.value()
                                 + "; break it first.");
             }
+            // E1-12: a kinetic strike on an OWNED target requires a positive war state.
+            // Absence of a forbidding treaty is necessary but NOT sufficient -
+            // peace-but-not-treaty is still peace. A neutral (unowned) target is exempt
+            // (targetOwner == null), so this gate is only reached for owned targets.
+            if (!state.atWar(actor, targetOwner)) {
+                return ValidationResult.reject(RejectionReason.NOT_AT_WAR,
+                        "You are not at war with " + targetOwner.value()
+                                + "; declare war before attacking its forces.");
+            }
         }
-        // TODO(E1-09): NOT_AT_WAR - against a non-neutral target a state of war is
-        // required. War is not a first-class state value yet; treaty-forbids gate
-        // enforced now, positive must-be-at-war deferred. Range needs lane graph.
+        // TODO(E1-10): fleet-positioned-at-target range gate (needs lane graph) lands
+        // with combat in E1-10.
         return ValidationResult.valid();
     }
 
@@ -644,9 +652,16 @@ public final class ActionValidator {
                         "Treaty " + t.id().value() + " (" + t.type()
                                 + ") forbids blockading " + targetOwner.value() + ".");
             }
+            // E1-12: blockading an owned route/system requires a positive war state
+            // (a neutral target is exempt - targetOwner == null).
+            if (!state.atWar(actor, targetOwner)) {
+                return ValidationResult.reject(RejectionReason.NOT_AT_WAR,
+                        "You are not at war with " + targetOwner.value()
+                                + "; declare war before blockading its assets.");
+            }
         }
-        // TODO(E1-09): NOT_AT_WAR / contested-status gate, and fleet positioning on
-        // the route/system (needs lane graph, E2-03).
+        // TODO(E1-11): fleet positioning on the route/system (needs lane graph) lands
+        // with blockade effects in E1-11.
         return ValidationResult.valid();
     }
 
@@ -677,8 +692,15 @@ public final class ActionValidator {
                     "Treaty " + t.id().value() + " (" + t.type()
                             + ") forbids raiding " + route.owner().value() + ".");
         }
-        // TODO(E1-09): NOT_AT_WAR / contested gate, and fleet positioning on the
-        // route (needs lane graph, E2-03).
+        // E1-12: a route always has an owner, so raiding always targets an owned asset
+        // and therefore always requires a positive war state - no neutral exemption.
+        if (!state.atWar(actor, route.owner())) {
+            return ValidationResult.reject(RejectionReason.NOT_AT_WAR,
+                    "You are not at war with " + route.owner().value()
+                            + "; declare war before raiding its route.");
+        }
+        // TODO(E1-11): fleet positioning on the route (needs lane graph) lands with
+        // raid effects in E1-11.
         return ValidationResult.valid();
     }
 

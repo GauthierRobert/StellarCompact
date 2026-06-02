@@ -54,6 +54,17 @@ public record Faction(
     }
 
     /**
+     * Copy-on-write: a new Faction identical to this one but with the given public
+     * reputation (game-design 04 section 3). The diplomacy step (E1-12) moves this
+     * value by config-driven gains/penalties (honouring a treaty raises it; breaking
+     * one or declaring an unprovoked war lowers it); the value is the public ledger
+     * other Sovereigns read in their WorldView, so it is plain faction state.
+     */
+    public Faction withReputation(double newReputation) {
+        return new Faction(id, name, newReputation, stockpiles, techProgress);
+    }
+
+    /**
      * Copy-on-write: a new Faction identical to this one but with the given tech
      * DAG view. The Research step (E1-08) inserts/advances a {@link TechProgress}
      * node every tick a faction researches; this keeps the call site immutable.

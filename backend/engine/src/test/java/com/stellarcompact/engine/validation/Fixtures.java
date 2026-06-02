@@ -130,6 +130,11 @@ final class Fixtures {
         return baseState(Map.of(), rich(), Map.of(), List.of());
     }
 
+    /** The base state but with an active war between {@code x} and {@code y} (E1-12 war gate). */
+    static GameState baseStateAtWar(FactionId x, FactionId y) {
+        return baseState().withWar(x, y, 1L);
+    }
+
     static GameState baseState(Map<TreatyId, Treaty> treaties,
                                ResourceBundle alphaStockpiles,
                                Map<TechId, TechProgress> alphaTech,

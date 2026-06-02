@@ -69,6 +69,16 @@ Action.type ∈ {
 }
 ```
 
+### 3a. Diplomacy enforcement (E1-12)
+
+The diplomatic-state actions resolve **first** (resolution-order step 1, before any kinetic step), so a war declared or treaty broken this tick is in force for the actions that follow:
+
+- `ProposeTreaty` mints a **PROPOSED** treaty (engine-assigned deterministic id from proposer/addressee/type/tick/submission-order); `AcceptTreaty` flips it to **ACTIVE** (now engine-enforced), `DeclineTreaty` closes it (**EXPIRED**, no penalty — declining an offer is not betrayal).
+- `BreakTreaty` terminates an ACTIVE treaty (**BROKEN**) and docks the breaker's reputation by `penaltyBreakTreaty × treatyEnforcement[type] × remainingDurationTicks`. It is "announced galaxy-wide" — the state (BROKEN treaty) is recorded; the public-event emission lands with the EVENTS step.
+- `DeclareWar` records a `WarState` (the positive gate kinetic actions require) and docks `penaltyUnprovokedWar` for a **new** war; re-declaring an existing war is idempotent and not re-penalised.
+- `Tribute` is engine-enforced (not soft chatter): it **transfers** `resources` from payer to recipient through the tick's escrow ledger (atomic debit + credit). `DemandTribute` remains a non-binding ultimatum delivered to the target.
+- Active treaties are enforced by the validator refusing illegal kinetic actions: `Attack`/`Blockade`/`Raid`/`DeclareWar` against a NonAggression/Alliance/Ceasefire partner are `Rejected{TREATY_FORBIDS, treatyId}` until the treaty is broken first.
+
 ## 4. Validation contract
 
 For each action the engine answers `Valid` or `Rejected{reason}`. Rejection reasons are human-readable and fed back on the single re-prompt, e.g.:
@@ -78,7 +88,7 @@ For each action the engine answers `Valid` or `Rejected{reason}`. Rejection reas
 
 The validator never trusts an agent-supplied id/owner/count; everything is checked against authoritative `GameState`, and rejection messages reference only actor-knowable facts (own assets, the public reputation/treaty ledger, ids the actor itself supplied). The following invariants are specified now but their enforcement depends on records/systems landing in later cards — each is a **hard prerequisite** on the named resolver card, because the check only becomes exploitable once the resolver mutates state:
 
-- **Kinetic war-state (E1-09).** A kinetic action (`Attack`/`Blockade`/`Raid`) requires a positive war-state OR a neutral (unowned) target. Absence of a forbidding treaty is *necessary but not sufficient* — an agent must not strike a faction it is at peace-but-not-treaty with. (E1-04 enforces the treaty-forbids half; the positive war-state gate awaits the war-state record in E1-09.)
+- **Kinetic war-state (E1-09/E1-12).** A kinetic action (`Attack`/`Blockade`/`Raid`) requires a positive war-state OR a neutral (unowned) target. Absence of a forbidding treaty is *necessary but not sufficient* — an agent must not strike a faction it is at peace-but-not-treaty with. E1-04 enforces the treaty-forbids half (`TREATY_FORBIDS` with treaty id); the positive war-state gate (`NOT_AT_WAR`) is enforced once the `WarState` record exists (introduced with `DeclareWar` in the diplomacy card).
 - **Lane adjacency / reachability (E2-03/E1-09).** `Explore`, `Colonize`, `MoveFleet` (incl. origin = the fleet's current location and each hop being a real lane), `EstablishRoute`, and "fleet positioned at target" for kinetic actions require the lane graph. Until then movement/adjacency is only shape-checked; the resolver MUST NOT move/fight on an unvalidated path.
 - **Directed trade offers (E1-07 — IMPLEMENTED).** The `MarketOrder`/directed-offer record carries an **`addressee`** (`Optional<FactionId>`) and an **`expiresTick`** (`long`). An *open* order-book limit order has `addressee = empty` (anyone may match it through the book); a *directed* peer-to-peer offer sets `addressee` to the single faction allowed to accept/decline it. `AcceptTrade`/`DeclineTrade` are valid only for offers whose `addressee` is the actor (a present addressee not equal to the actor, or an empty addressee on an Accept/Decline, is rejected `NOT_OWNED`/`TARGET_UNKNOWN`) **and** that have not expired — an offer is expired when `state.tick > expiresTick`, rejected `OFFER_EXPIRED`. `WithdrawTrade` still checks proposer-identity (the order's `faction`), not addressee. E1-04 checked existence/proposer-identity only; addressee + expiry are enforced from E1-07.
 - **Atomic escrow at resolution (E1-05).** Affordability is a per-action *snapshot* at validation time. The resolver must debit/escrow under a single authoritative pass so N validated spends in one tick cannot collectively overdraw one stockpile.

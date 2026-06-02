@@ -17,5 +17,23 @@ public enum TreatyType {
     /** Full pact: non-aggression + shared border vision + allied routes + pooled votes. */
     ALLIANCE,
     /** Vassal pays recurring tribute and cannot declare war independently. */
-    VASSALAGE
+    VASSALAGE;
+
+    /**
+     * @return this type's stable config key into
+     * {@code BalanceProfile.Diplomacy.treatyEnforcement} (the camelCase weight
+     * keys, e.g. {@code "nonAggression"}). Keeping the mapping here means the
+     * resolver never hardcodes a weight key string (rule 6: numbers - and the keys
+     * that name them - live in config, looked up by a stable, typed accessor).
+     */
+    public String configKey() {
+        return switch (this) {
+            case CEASEFIRE -> "ceasefire";
+            case NON_AGGRESSION -> "nonAggression";
+            case TRADE_PACT -> "tradePact";
+            case DEFENSIVE_PACT -> "defensivePact";
+            case ALLIANCE -> "alliance";
+            case VASSALAGE -> "vassalage";
+        };
+    }
 }

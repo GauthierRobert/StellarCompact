@@ -46,23 +46,55 @@ public record BalanceProfile(
         // --- E1-13 espionage (append-only; see Espionage record below) ---
         Espionage espionage,
         // --- E1-14 influence accrual & decay (append-only; see Influence record below) ---
-        Influence influence
+        Influence influence,
+        // --- E9-01 small->large progression & identity/reputation-only carry-over ---
+        Progression progression
 ) {
 
     /**
      * Compact constructor. Movement (E1-09), home placement (E2-04), espionage
-     * (E1-13) and influence (E1-14) are all additive; a profile (or fixture) that omits
-     * any of them gets the inert defaults ({@link Movement#defaults()} = free
-     * travel/interception off, {@link HomePlacement#defaults()},
-     * {@link Espionage#defaults()} = ops always fail / are never detected,
-     * {@link Influence#defaults()} = no accrual, no decay) so it stays loadable and
-     * deterministic (forward-compatible, like the tech DAG / terraform chain defaults).
+     * (E1-13), influence (E1-14) and progression (E9-01) are all additive; a profile
+     * (or fixture) that omits any of them gets the inert defaults
+     * ({@link Movement#defaults()} = free travel/interception off,
+     * {@link HomePlacement#defaults()}, {@link Espionage#defaults()} = ops always fail /
+     * are never detected, {@link Influence#defaults()} = no accrual, no decay,
+     * {@link Progression#defaults()} = SMALL galaxy / open seat / no reputation carry) so
+     * it stays loadable and deterministic (forward-compatible, like the tech DAG /
+     * terraform chain defaults).
      */
     public BalanceProfile {
         movement = movement == null ? Movement.defaults() : movement;
         homePlacement = homePlacement == null ? HomePlacement.defaults() : homePlacement;
         espionage = espionage == null ? Espionage.defaults() : espionage;
         influence = influence == null ? Influence.defaults() : influence;
+        progression = progression == null ? Progression.defaults() : progression;
+    }
+
+    /**
+     * Backwards-compatible constructor through {@code influence} (no E9-01
+     * {@code progression} block): delegates to the canonical constructor with
+     * {@link Progression#defaults()}. Lets pre-E9-01 fixtures/profiles that build a
+     * profile positionally (through {@code influence}) keep compiling unchanged.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick,
+            HomePlacement homePlacement,
+            Espionage espionage,
+            Influence influence) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, homePlacement, espionage,
+                influence, Progression.defaults());
     }
 
     /**
@@ -818,6 +850,88 @@ public record BalanceProfile(
          */
         public static Influence defaults() {
             return new Influence(0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+    }
+
+    /**
+     * Small-&gt;large progression and identity/reputation-only carry-over tunables
+     * (E9-01; game-design 07 section 6, 06 section 5).
+     *
+     * <p>The progression loop: a Sovereign proves itself in cheap, fast, ephemeral
+     * <b>small</b> galaxies, earns <em>standing</em> (a seat), then graduates into the
+     * expensive, slow, persistent <b>large</b> campaign. The cardinal fairness rule
+     * (game-design 06 section 5 / 07 section 6): a graduating Sovereign carries
+     * <b>only identity and reputation</b> - never raw resources, tech, fleets or
+     * territory - so a veteran cannot buy a runaway start. This block is the entire
+     * set of numbers that gates the seat and weights the carried reputation; nothing
+     * is hardcoded in {@code progression.*} (rule 6).
+     *
+     * <ul>
+     *   <li>{@code sizeClass} - which galaxy tier this profile configures:
+     *       {@code "SMALL"} (the funnel: completing one earns standing) or
+     *       {@code "LARGE"} (the persistent campaign: entry is gated by standing).
+     *       A small profile sets it {@code "SMALL"}; a large profile {@code "LARGE"}.
+     *       Defaults to {@code "SMALL"} (the open-entry tier) when omitted.</li>
+     *   <li>{@code seatThresholdScore} - the minimum final {@code Scoring} a faction
+     *       must reach in a concluded <em>small</em> match to earn a seat in a large
+     *       galaxy. A faction at or above this is admitted; below it is denied. Only
+     *       meaningful on a LARGE profile (it gates entry <em>into</em> that tier);
+     *       {@code 0.0} (the default) opens the seat to anyone who completed a match.</li>
+     *   <li>{@code winGrantsSeat} - if {@code true}, winning (placing first) a small
+     *       match earns a seat <em>regardless</em> of {@code seatThresholdScore}, so a
+     *       narrow-but-victorious campaign still graduates. Defaults {@code false}.</li>
+     *   <li>{@code reputationCarryWeight} - the fraction [0,1] of a graduating
+     *       Sovereign's prior-standing reputation that seeds its identity in the new
+     *       large match. {@code 1.0} carries reputation intact; {@code 0.0} starts the
+     *       reputation clean (identity-only). This is the <em>only</em> non-material
+     *       quantity that crosses the boundary. Defaults {@code 0.0} (clean start).</li>
+     *   <li>{@code starterStockpile} - the material loadout EVERY faction entering a
+     *       match of this tier starts with: the fresh resource bundle that REPLACES any
+     *       prior stockpile. Carry-over resets material state to exactly this, so no
+     *       resources/tech/fleets leak across matches (the enforcement of the
+     *       no-material-advantage rule). Defaults to the all-zero bundle.</li>
+     * </ul>
+     */
+    public record Progression(
+            String sizeClass,
+            double seatThresholdScore,
+            boolean winGrantsSeat,
+            double reputationCarryWeight,
+            ResourceBundle starterStockpile
+    ) {
+        /**
+         * Compact constructor: normalises {@code sizeClass} to upper-case (so
+         * {@code "small"}/{@code "SMALL"} are equivalent, defaulting blank to
+         * {@code "SMALL"}), floors the seat threshold at {@code 0.0}, and clamps the
+         * reputation carry weight into {@code [0,1]} so a malformed profile can neither
+         * subtract reputation nor amplify it past the prior value. A null starter bundle
+         * defaults to the all-zero loadout (a clean material start).
+         */
+        public Progression {
+            sizeClass = (sizeClass == null || sizeClass.isBlank())
+                    ? "SMALL" : sizeClass.trim().toUpperCase();
+            if (seatThresholdScore < 0.0) {
+                seatThresholdScore = 0.0;
+            }
+            if (reputationCarryWeight < 0.0) {
+                reputationCarryWeight = 0.0;
+            } else if (reputationCarryWeight > 1.0) {
+                reputationCarryWeight = 1.0;
+            }
+            starterStockpile = starterStockpile == null
+                    ? new ResourceBundle(0.0, 0.0, 0.0, 0.0, 0.0) : starterStockpile;
+        }
+
+        /**
+         * Inert defaults for a profile that omits the E9-01 block: a SMALL galaxy with an
+         * open seat ({@code 0.0} threshold, win does not auto-grant), no reputation carry
+         * ({@code 0.0} - identity-only) and an all-zero starter stockpile. A real match
+         * supplies the tier's own values (the shipped {@code small-default} /
+         * {@code large-persistent} profiles do).
+         */
+        public static Progression defaults() {
+            return new Progression("SMALL", 0.0, false, 0.0,
+                    new ResourceBundle(0.0, 0.0, 0.0, 0.0, 0.0));
         }
     }
 }

@@ -174,6 +174,19 @@ public final class BalanceProfileLoader {
                 "espionage.stealResourceFraction must be in [0,1]");
         require(esp.unrestPopulationLoss() >= 0, "espionage.unrestPopulationLoss must be >= 0");
         require(prob(esp.unrestLoyaltyLoss()), "espionage.unrestLoyaltyLoss must be in [0,1]");
+
+        // progression (E9-01). Additive: a profile may omit the block (inert SMALL/open
+        // defaults). The record already normalises sizeClass and clamps the carry weight;
+        // here we assert the tier names a known galaxy class and the threshold is sane so
+        // a typo'd tier or a negative threshold fails loudly at load.
+        BalanceProfile.Progression prog = req(p.progression(), "progression");
+        require(prog.sizeClass().equals("SMALL") || prog.sizeClass().equals("LARGE"),
+                "progression.sizeClass must be SMALL or LARGE, was '" + prog.sizeClass() + "'");
+        require(prog.seatThresholdScore() >= 0.0,
+                "progression.seatThresholdScore must be >= 0");
+        require(prob(prog.reputationCarryWeight()),
+                "progression.reputationCarryWeight must be in [0,1]");
+        req(prog.starterStockpile(), "progression.starterStockpile");
     }
 
     private static boolean prob(double x) {

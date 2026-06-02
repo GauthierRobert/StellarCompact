@@ -53,4 +53,6 @@ Because the engine is **deterministic** and emits a complete **event log**, any 
 
 This is both the gameplay arc and the monetisation/scale story (small = cheap funnel, large = the expensive, high-value, spectacle tier). See `docs/architecture` for how the largest galaxies are made technically possible.
 
-> All thresholds (X%, Y influence, N ticks, score weights) are balance config, externalised and tunable per match.
+**Seasons & the leaderboard (E9-03).** A *season* is the bracket Sovereigns are entered into: it aggregates the standings/scores (§2) of multiple **concluded** matches into one season **leaderboard** per Sovereign — `aggregate = matchScoreWeight·Σ(matchScore) + winBonus·wins + participationBonus·matchesPlayed`, ordered by aggregate score (ties broken stably by faction id). That same aggregate **feeds the small→large seat gate** above: it is projected back into a standing and run through the *same* gating logic, so a Sovereign whose season aggregate clears the seat threshold (or wins, when `winGrantsSeat`, having played at least `minMatchesForSeat` matches) graduates to a large persistent galaxy; one below does not. Scoring (§2) and gating (the loop above) are reused, never duplicated. Pure, deterministic engine logic lives in `engine.season` (`Season`, `SeasonStanding`, `SeasonAggregation`); all season weights are balance config (`season.*`).
+
+> All thresholds (X%, Y influence, N ticks, score weights, season weights) are balance config, externalised and tunable per match.

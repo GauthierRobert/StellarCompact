@@ -48,7 +48,9 @@ public record BalanceProfile(
         // --- E1-14 influence accrual & decay (append-only; see Influence record below) ---
         Influence influence,
         // --- E9-01 small->large progression & identity/reputation-only carry-over ---
-        Progression progression
+        Progression progression,
+        // --- E9-03 tournament/season aggregation & leaderboard weights ---
+        Season season
 ) {
 
     /**
@@ -68,6 +70,35 @@ public record BalanceProfile(
         espionage = espionage == null ? Espionage.defaults() : espionage;
         influence = influence == null ? Influence.defaults() : influence;
         progression = progression == null ? Progression.defaults() : progression;
+        season = season == null ? Season.defaults() : season;
+    }
+
+    /**
+     * Backwards-compatible constructor through {@code progression} (no E9-03
+     * {@code season} block): delegates to the canonical constructor with
+     * {@link Season#defaults()}. Lets pre-E9-03 fixtures/profiles that build a profile
+     * positionally (through {@code progression}) keep compiling unchanged.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick,
+            HomePlacement homePlacement,
+            Espionage espionage,
+            Influence influence,
+            Progression progression) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, homePlacement, espionage,
+                influence, progression, Season.defaults());
     }
 
     /**
@@ -94,7 +125,7 @@ public record BalanceProfile(
             Influence influence) {
         this(name, version, resources, population, market, construction, combat,
                 movement, tech, diplomacy, victory, tick, homePlacement, espionage,
-                influence, Progression.defaults());
+                influence, Progression.defaults(), Season.defaults());
     }
 
     /**
@@ -932,6 +963,75 @@ public record BalanceProfile(
         public static Progression defaults() {
             return new Progression("SMALL", 0.0, false, 0.0,
                     new ResourceBundle(0.0, 0.0, 0.0, 0.0, 0.0));
+        }
+    }
+
+    /**
+     * Tournament / season aggregation weights (E9-03; game-design 07 section 2 + section
+     * 6). A <b>season</b> aggregates the per-match {@code StandingRecord}s of multiple
+     * concluded matches into a single season ranking (the leaderboard) per Sovereign, and
+     * that aggregate then feeds the same {@code progression} seat gate that a single match
+     * does (no forked ranking/gating logic - the season aggregate is projected into a
+     * {@code StandingRecord} and passed to {@code ProgressionEvaluation.admits}).
+     *
+     * <p>Every number here is config (rule 6); the aggregation in {@code engine.season} is
+     * a pure function of the input standings + these weights, so the same standings always
+     * produce the same season ranking (determinism, rule 1).
+     *
+     * <ul>
+     *   <li>{@code matchScoreWeight} - the weight applied to a Sovereign's <em>summed</em>
+     *       per-match {@code Scoring} across the season. {@code 1.0} means the season
+     *       aggregate is the raw sum of match scores; a smaller value damps raw score in
+     *       favour of the win bonus below. Must be &gt;= 0 (floored at 0).</li>
+     *   <li>{@code winBonus} - a flat bonus added to the aggregate for every match the
+     *       Sovereign <em>won</em> (placed 1st). Rewards consistency/victories over a
+     *       single high-scoring blow-out. {@code 0.0} = scores-only seasons. Floored at
+     *       0.</li>
+     *   <li>{@code participationBonus} - a flat bonus per concluded match the Sovereign
+     *       took part in (rewards showing up across the season). {@code 0.0} = no
+     *       participation credit. Floored at 0.</li>
+     *   <li>{@code minMatchesForSeat} - the minimum number of concluded matches a Sovereign
+     *       must have played in the season before its season aggregate is allowed to clear
+     *       a LARGE seat (a Sovereign with fewer plays is held below the gate regardless of
+     *       aggregate). {@code 1} (the default) means a single match suffices; raise it to
+     *       require a real campaign body of work. Floored at 1.</li>
+     * </ul>
+     */
+    public record Season(
+            double matchScoreWeight,
+            double winBonus,
+            double participationBonus,
+            int minMatchesForSeat
+    ) {
+        /**
+         * Compact constructor: floors {@code matchScoreWeight}/{@code winBonus}/
+         * {@code participationBonus} at {@code 0.0} (a malformed profile can never subtract
+         * from the aggregate) and {@code minMatchesForSeat} at {@code 1} (at least one
+         * match is always required to have a standing at all).
+         */
+        public Season {
+            if (matchScoreWeight < 0.0) {
+                matchScoreWeight = 0.0;
+            }
+            if (winBonus < 0.0) {
+                winBonus = 0.0;
+            }
+            if (participationBonus < 0.0) {
+                participationBonus = 0.0;
+            }
+            if (minMatchesForSeat < 1) {
+                minMatchesForSeat = 1;
+            }
+        }
+
+        /**
+         * Inert defaults for a profile that omits the E9-03 block: the season aggregate is
+         * exactly the raw sum of per-match scores ({@code matchScoreWeight = 1.0}, no win or
+         * participation bonus) and a single match suffices for a seat
+         * ({@code minMatchesForSeat = 1}). A real season tier supplies its own weights.
+         */
+        public static Season defaults() {
+            return new Season(1.0, 0.0, 0.0, 1);
         }
     }
 }

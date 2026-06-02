@@ -275,5 +275,11 @@
     "winGrantsSeat": true,
     "reputationCarryWeight": 0.5,
     "starterStockpile": { "energy": 120.0, "minerals": 120.0, "food": 80.0, "tech": 20.0, "influence": 0.0 }
+  },
+  "season": {
+    "matchScoreWeight": 1.0,
+    "winBonus": 25.0,
+    "participationBonus": 2.0,
+    "minMatchesForSeat": 3
   }
 }

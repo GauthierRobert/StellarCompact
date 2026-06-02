@@ -75,7 +75,11 @@ class ScriptedMatchTest {
 
             for (Sovereign s : ordered) {
                 FactionId actor = s.factionId();
-                WorldView view = WorldViewProjection.project(state, actor);
+                // E3-02: the scripted bot now consumes a real, fog-filtered WorldView
+                // from the production builder (no lane graph supplied in this minimal
+                // loop, so adjacency-based sensor reveal is off; the bot's heuristics
+                // need only its own owned assets, which are always in full view).
+                WorldView view = WorldViewBuilder.build(state, actor);
                 AgentResponse response = s.decide(view);
 
                 int submissionOrder = 0;

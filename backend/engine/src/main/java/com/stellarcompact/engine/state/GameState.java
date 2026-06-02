@@ -110,6 +110,19 @@ public record GameState(
     }
 
     /**
+     * Copy-on-write: a new snapshot with {@code route} inserted/replaced by its id,
+     * every other collection shared structurally. The INTERDICTION step (E1-11
+     * {@code Blockade}) flips a route's status to
+     * {@link RouteStatus#BLOCKADED} through this seam.
+     */
+    public GameState withRoute(Route route) {
+        Map<RouteId, Route> next = new LinkedHashMap<>(routes);
+        next.put(route.id(), route);
+        return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
+                factions, systems, fleets, treaties, next, marketOrders, wars);
+    }
+
+    /**
      * Copy-on-write: a new snapshot whose entire market order book is replaced by
      * {@code newOrders}. The market-matching step (E1-07) rebuilds the book once
      * per tick (filled/partial/withdrawn orders updated together), so it replaces

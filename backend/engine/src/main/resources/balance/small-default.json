@@ -45,7 +45,9 @@
   "market": {
     "matchPolicy": "priceTimePriority",
     "routeInfluencePerVolume": 0.5,
-    "currency": "ENERGY"
+    "currency": "ENERGY",
+    "blockadeThroughputFactor": 0.75,
+    "raidStealFraction": 0.5
   },
   "construction": {
     "buildTimes": {

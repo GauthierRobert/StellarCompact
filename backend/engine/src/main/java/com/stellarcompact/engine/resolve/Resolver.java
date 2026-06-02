@@ -154,7 +154,7 @@ public final class Resolver {
             case ESPIONAGE -> resolveActionDriven(state, slice, ctx);
             case MOVEMENT -> resolveMovement(state, slice, ctx);
             case COMBAT -> resolveCombat(state, slice, ctx);
-            case INTERDICTION -> resolveActionDriven(state, slice, ctx);
+            case INTERDICTION -> resolveInterdiction(state, slice, ctx);
             case DEVELOPMENT -> resolveDevelopment(state, slice, ctx);
             case COLONISATION -> resolveActionDriven(state, slice, ctx);
             case MARKET -> resolveMarket(state, slice, ctx);
@@ -229,6 +229,25 @@ public final class Resolver {
             next = CombatResolution.resolveInterception(next, pb, ctx.seed(), ctx.tick(), ctx.profile());
         }
         return CombatResolution.resolve(next, slice, ctx.seed(), ctx.tick(), ctx.profile());
+    }
+
+    /**
+     * The INTERDICTION step (E1-11; game-design 05 section 5, 02 section 5). Folds the
+     * ordered {@code Blockade}/{@code Raid} action slice through
+     * {@link InterdictionResolution}: a {@code Blockade} flips the targeted route (or every
+     * route touching the targeted system) to
+     * {@link com.stellarcompact.engine.state.RouteStatus#BLOCKADED} - a deterministic
+     * throughput choke whose magnitude is {@code market.blockadeThroughputFactor} (config);
+     * a {@code Raid} steals a seeded fraction of a route's cargo
+     * ({@code volume x market.raidStealFraction x roll}, the roll drawn from
+     * {@code gameSeed XOR tick XOR SaltDomain.RAID.salt(routeId)}), escrowing the debit off
+     * the route owner and the credit to the raider through the tick-wide ledger. Both are
+     * validator-gated by war/treaty state (E1-09 F1); no territory is captured.
+     */
+    private static GameState resolveInterdiction(GameState state, List<SubmittedAction> slice,
+                                                 StepContext ctx) {
+        return InterdictionResolution.resolve(state, slice, ctx.seed(), ctx.tick(),
+                ctx.profile(), ctx.ledger());
     }
 
     /**
@@ -394,12 +413,26 @@ public final class Resolver {
         return s;
     }
 
+    /**
+     * E1-11: Blockade is handled by {@link #resolveInterdiction} via
+     * {@link InterdictionResolution} (route/system throughput choke), not through this
+     * per-action stub, so this arm is unreachable for the INTERDICTION step. It remains
+     * only to keep the sealed-{@link Action} switch exhaustive (a new variant must still
+     * break compilation here).
+     */
     private static GameState stubBlockade(GameState s, FactionId a, Action.Blockade x, StepContext c) {
-        return s; // TODO(E1-11): choke route/system market throughput.
+        return s;
     }
 
+    /**
+     * E1-11: Raid is handled by {@link #resolveInterdiction} via
+     * {@link InterdictionResolution} (seeded shipment steal escrowed through the ledger),
+     * not through this per-action stub, so this arm is unreachable for the INTERDICTION
+     * step. It remains only to keep the sealed-{@link Action} switch exhaustive (a new
+     * variant must still break compilation here).
+     */
     private static GameState stubRaid(GameState s, FactionId a, Action.Raid x, StepContext c) {
-        return s; // TODO(E1-11): seeded shipment steal.
+        return s;
     }
 
     /**

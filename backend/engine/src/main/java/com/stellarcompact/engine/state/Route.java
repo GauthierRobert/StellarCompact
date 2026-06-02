@@ -48,4 +48,22 @@ public record Route(
         }
         resources = List.copyOf(resources);
     }
+
+    /**
+     * Copy-on-write: this route with a different {@link RouteStatus}, every other
+     * field shared structurally. The INTERDICTION step (E1-11 {@code Blockade})
+     * flips an {@code ACTIVE} route to {@code BLOCKADED} (later cards lift it back);
+     * the choke is a status flag here, while the throughput-reduction <em>factor</em>
+     * it implies lives in config ({@code market.blockadeThroughputFactor}) so the
+     * resolver hardcodes no number. Returns {@code this} when the status is unchanged.
+     */
+    public Route withStatus(RouteStatus newStatus) {
+        if (newStatus == null) {
+            throw new IllegalArgumentException("Route.withStatus: newStatus must be set");
+        }
+        if (newStatus == status) {
+            return this;
+        }
+        return new Route(id, owner, systemA, systemB, kind, resources, volume, newStatus);
+    }
 }

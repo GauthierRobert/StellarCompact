@@ -95,6 +95,12 @@ balanceProfile:
     stealResourceFraction: ..                                  # STEAL_INTEL fallback: fraction [0,1] of target stockpile transferred when no stealable tech exists
     unrestPopulationLoss: ..                                   # INCITE_UNREST: population removed from the struck colony (>= 0)
     unrestLoyaltyLoss: ..                                      # INCITE_UNREST: loyalty removed from the struck system [0,1], floored at 0
+  progression:                              # E9-01 (game-design 07 §6, 06 §5): small->large gating + identity/reputation-ONLY carry-over
+    sizeClass: SMALL                        # which tier this profile configures: SMALL (the free/fast funnel) | LARGE (the persistent gated campaign). Default SMALL when omitted
+    seatThresholdScore: ..                  # min concluded-SMALL-match Scoring (E1-15) a faction must reach to be admitted a LARGE seat (>= 0); only gates entry INTO a LARGE galaxy. 0 = open seat
+    winGrantsSeat: false                    # if true, WINNING (placing 1st) a small match earns a seat regardless of seatThresholdScore
+    reputationCarryWeight: ..               # fraction [0,1] of prior-standing reputation that seeds the carried identity in the new match. 0 = clean (identity-only) start; the ONLY non-material quantity that crosses the boundary
+    starterStockpile: { energy:.., minerals:.., food:.., tech:.., influence:.. }   # the fresh material loadout EVERY entrant of this tier starts with; carry-over RESETS material state to exactly this (no resources/tech/fleets ever carry)
 ```
 
 **Home placement (E2-04).** A pure function of `(gameSeed, lane graph, homePlacement config)` chooses one home system per faction such that (a) every pair of homes is at least `minSeparationHops` lane hops apart, and (b) the chosen homes' neighbourhood-quality scores — colonisable build capacity + habitable cradles + resource accessibility within `neighbourhoodHops` hops — all fall inside a band of width `qualityToleranceFraction × maxChosenQuality`, so no faction is gifted a runaway start. If the galaxy cannot satisfy the request (too few cradle candidates, or no separated+balanced set exists) placement fails deterministically rather than cramming factions together. The authoritative numbers live here; the framework-free `galaxy` module receives them via a mirror `HomePlacementConfig` (it cannot depend on the engine).
@@ -105,6 +111,13 @@ balanceProfile:
 - On **success**: `SCOUT` records the actor in the target faction's `revealedIntel`; `STEAL_INTEL` copies one UNLOCKED tech the actor lacks (lowest tech-id), else transfers `stealResourceFraction` of the target stockpile; `SABOTAGE` flips the first ACTIVE building in the target's territory to IDLE; `INCITE_UNREST` drops the first owned colony's population/loyalty.
 - On **detection** (independent of success): the actor's reputation drops by `diplomacy.reputation.espionageDetectedPenalty`.
 - Cost is escrowed through the tick-wide ledger **win or lose**; nothing debits a stockpile directly.
+
+### Small→large progression & carry-over (E9-01)
+- The match tier is the profile's `progression.sizeClass`: a `small-default` profile is `SMALL` (the cheap/fast funnel, open entry); `large-persistent` is `LARGE` (the slow, persistent, gated campaign). Tick cadence already scales with the tier (`tick.intervalMs`: small ~seconds, large ~minutes); the progression block adds the gating and carry rules.
+- **Standing.** A *concluded* match yields one `StandingRecord` per faction — a pure projection of the final snapshot + the `Scoring` ranking (E1-15): identity (faction id + name), final score, final reputation, 1-based placement, match size. It holds **no material state** by construction, so it physically cannot carry advantage forward.
+- **Seat gating.** Completing a SMALL match earns standing. Entry into a LARGE galaxy is admitted iff the SMALL standing's `score >= progression.seatThresholdScore`, OR (`progression.winGrantsSeat` and the Sovereign placed 1st). A faction below the bar is denied a seat. SMALL (funnel) galaxies are always open entry — only the persistent campaign gates.
+- **Identity/reputation-ONLY carry-over.** Crossing the boundary produces a `CarriedIdentity` = { faction id, name, `reputation × progression.reputationCarryWeight` }. Seeding it into the new match RESETS the faction's material state to the destination profile's `progression.starterStockpile` with an empty tech DAG (no resources, tech, fleets or territory carry). This is the enforcement of game-design 06 §5 / 07 §6: identity + standing persist, material advantage never does.
+- All of this is pure engine logic in `engine.progression` (`ProgressionEvaluation`, `StandingRecord`, `CarriedIdentity`, `GalaxySizeClass`); persisting records between matches and constructing the next match's `GameState` from carried identities are orchestration concerns that call these pure functions.
 
 ## Rules
 - Two named profiles to ship: `small-default` and `large-persistent`.

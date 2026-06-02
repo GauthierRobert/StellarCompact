@@ -268,5 +268,12 @@
     "perTradeVolume": 0.4,
     "perActiveTreaty": 0.6,
     "decayRate": 0.01
+  },
+  "progression": {
+    "sizeClass": "LARGE",
+    "seatThresholdScore": 60.0,
+    "winGrantsSeat": true,
+    "reputationCarryWeight": 0.5,
+    "starterStockpile": { "energy": 120.0, "minerals": 120.0, "food": 80.0, "tech": 20.0, "influence": 0.0 }
   }
 }

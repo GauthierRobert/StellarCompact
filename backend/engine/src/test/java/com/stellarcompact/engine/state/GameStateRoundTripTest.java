@@ -92,7 +92,7 @@ class GameStateRoundTripTest {
 
         MarketOrder order = new MarketOrder(
                 new MarketOrderId("order-1"), sHome, fB, MarketSide.BUY,
-                PhysicalResource.FOOD, 50, 3.25, 7, OrderStatus.OPEN);
+                PhysicalResource.FOOD, 50, 3.25, 7, 20, Optional.of(fA), OrderStatus.OPEN);
 
         return new GameState(
                 987654321L, 7, GameStatus.RUNNING, "small-default", 1,

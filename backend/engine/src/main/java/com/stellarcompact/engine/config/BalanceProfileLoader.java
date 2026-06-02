@@ -94,6 +94,10 @@ public final class BalanceProfileLoader {
         BalanceProfile.Market m = req(p.market(), "market");
         require(m.matchPolicy() != null && !m.matchPolicy().isBlank(), "market.matchPolicy must be set");
         require(m.routeInfluencePerVolume() > 0.0, "market.routeInfluencePerVolume must be > 0");
+        require(m.currency() != null && !m.currency().isBlank(), "market.currency must be set");
+        require(isPhysicalResource(m.currency()),
+                "market.currency must be a physical resource (ENERGY|MINERALS|FOOD|TECH), was '"
+                        + m.currency() + "'");
 
         // construction
         BalanceProfile.Construction c = req(p.construction(), "construction");
@@ -154,6 +158,18 @@ public final class BalanceProfileLoader {
 
     private static boolean pct(double x) {
         return x > 0.0 && x <= 1.0;
+    }
+
+    /**
+     * @return {@code true} iff {@code name} is one of the four tradeable physical
+     * resources. Checked by literal name (not by importing the {@code state} enum)
+     * to keep the config module decoupled from state; the set mirrors
+     * {@code com.stellarcompact.engine.state.PhysicalResource}. Influence is
+     * deliberately excluded - it is never market-traded (economy 02 section 1).
+     */
+    private static boolean isPhysicalResource(String name) {
+        String n = name.trim().toUpperCase();
+        return n.equals("ENERGY") || n.equals("MINERALS") || n.equals("FOOD") || n.equals("TECH");
     }
 
     private static <T> T req(T value, String what) {

@@ -93,10 +93,28 @@ public record BalanceProfile(
         }
     }
 
-    /** Market order-book policy and route-driven Influence. */
+    /**
+     * Market order-book policy and route-driven Influence.
+     *
+     * <ul>
+     *   <li>{@code matchPolicy} - the matching discipline; the engine implements
+     *       {@code "priceTimePriority"} (E1-07). An unrecognised policy is treated
+     *       as price-time priority (the only one defined).</li>
+     *   <li>{@code routeInfluencePerVolume} - Influence generated per unit of trade
+     *       route volume (economy 02 section 5).</li>
+     *   <li>{@code currency} - the {@link com.stellarcompact.engine.state.PhysicalResource}
+     *       name (e.g. {@code "ENERGY"}) a market order's {@code price} is denominated
+     *       in. Order-book prices are scalars; the matcher pays {@code qty x price}
+     *       of this resource from the buyer to the seller, while the traded good
+     *       moves the other way. Keeping the numeraire in config (rule 6) avoids
+     *       hardcoding which resource is "money". A directed peer offer carries its
+     *       own give/receive bundles and does not use this.</li>
+     * </ul>
+     */
     public record Market(
             String matchPolicy,
-            double routeInfluencePerVolume
+            double routeInfluencePerVolume,
+            String currency
     ) {
     }
 

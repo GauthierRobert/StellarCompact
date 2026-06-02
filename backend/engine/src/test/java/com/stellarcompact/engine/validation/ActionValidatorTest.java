@@ -444,6 +444,70 @@ class ActionValidatorTest {
         assertRejected(validate(new Action.WithdrawTrade(OFFER_1)), RejectionReason.NOT_OWNED);
     }
 
+    // ===== Directed offer: addressee + expiry (E1-07 security prereq) ==========
+
+    @Test
+    void acceptOfferAddressedToMeValid() {
+        // baseState OFFER_1: proposed by BETA, addressed to ALPHA, expires tick 1000
+        // (state tick 5) -> ALPHA may accept.
+        assertValid(validate(new Action.AcceptTrade(OFFER_1)));
+    }
+
+    @Test
+    void acceptOfferAddressedToAnotherRejectedNotOwned() {
+        // Offer addressed to BETA, but ALPHA (the actor) tries to accept it.
+        GameState state = Fixtures.baseStateWithOffer(
+                Fixtures.offer(OFFER_1, BETA, BETA, 1000L));
+        assertRejected(ActionValidator.validate(state, ALPHA,
+                new Action.AcceptTrade(OFFER_1), PROFILE), RejectionReason.NOT_OWNED);
+    }
+
+    @Test
+    void acceptExpiredOfferRejectedOfferExpired() {
+        // Offer addressed to ALPHA but expired at tick 4 (state tick is 5).
+        GameState state = Fixtures.baseStateWithOffer(
+                Fixtures.offer(OFFER_1, BETA, ALPHA, 4L));
+        assertRejected(ActionValidator.validate(state, ALPHA,
+                new Action.AcceptTrade(OFFER_1), PROFILE), RejectionReason.OFFER_EXPIRED);
+    }
+
+    @Test
+    void declineOfferAddressedToAnotherRejectedNotOwned() {
+        GameState state = Fixtures.baseStateWithOffer(
+                Fixtures.offer(OFFER_1, BETA, BETA, 1000L));
+        assertRejected(ActionValidator.validate(state, ALPHA,
+                new Action.DeclineTrade(OFFER_1), PROFILE), RejectionReason.NOT_OWNED);
+    }
+
+    @Test
+    void declineExpiredOfferRejectedOfferExpired() {
+        GameState state = Fixtures.baseStateWithOffer(
+                Fixtures.offer(OFFER_1, BETA, ALPHA, 4L));
+        assertRejected(ActionValidator.validate(state, ALPHA,
+                new Action.DeclineTrade(OFFER_1), PROFILE), RejectionReason.OFFER_EXPIRED);
+    }
+
+    @Test
+    void acceptOpenBookOrderWithNoAddresseeRejectedNotOwned() {
+        // An open order-book order (no addressee) is matched by the engine, not
+        // accepted by id; ALPHA accepting it must be rejected.
+        GameState state = Fixtures.baseStateWithOffer(new com.stellarcompact.engine.state.MarketOrder(
+                OFFER_1, SYS_A, BETA, com.stellarcompact.engine.state.MarketSide.SELL,
+                com.stellarcompact.engine.state.PhysicalResource.MINERALS, 10, 1.0, 0L, 1000L,
+                Optional.empty(), com.stellarcompact.engine.state.OrderStatus.OPEN));
+        assertRejected(ActionValidator.validate(state, ALPHA,
+                new Action.AcceptTrade(OFFER_1), PROFILE), RejectionReason.NOT_OWNED);
+    }
+
+    @Test
+    void withdrawExpiredOwnOfferStillValid() {
+        // Proposer may tidy up an expired offer of its own (no expiry gate on Withdraw).
+        GameState state = Fixtures.baseStateWithOffer(
+                Fixtures.offer(OFFER_1, BETA, ALPHA, 4L));
+        assertValid(ActionValidator.validate(state, BETA,
+                new Action.WithdrawTrade(OFFER_1), PROFILE));
+    }
+
     // ===== ProposeTreaty ======================================================
 
     @Test

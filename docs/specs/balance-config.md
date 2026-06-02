@@ -16,6 +16,7 @@ balanceProfile:
   market:
     matchPolicy: priceTimePriority
     routeInfluencePerVolume: ..
+    currency: ENERGY            # PhysicalResource a market order price is denominated in (E1-07)
   construction:
     buildTimes: { mine:.., shipyard:.., terraformerStep:.. }
     costs: { ... }

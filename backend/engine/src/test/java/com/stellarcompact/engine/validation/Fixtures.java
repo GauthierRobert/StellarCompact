@@ -106,9 +106,23 @@ final class Fixtures {
                 List.of(PhysicalResource.MINERALS), 10.0, RouteStatus.ACTIVE);
     }
 
+    /**
+     * A directed peer offer: proposed by {@code owner}, addressed to {@code ALPHA}
+     * (the validator's acting faction in these tests), expiring far in the future
+     * (tick 1000 vs the base-state tick 5) so it is live unless a test overrides it.
+     */
     static MarketOrder offer(MarketOrderId id, FactionId owner) {
         return new MarketOrder(id, SYS_A, owner, MarketSide.SELL,
-                PhysicalResource.MINERALS, 10.0, 1.0, 0L, OrderStatus.OPEN);
+                PhysicalResource.MINERALS, 10.0, 1.0, 0L, 1000L, Optional.of(ALPHA),
+                OrderStatus.OPEN);
+    }
+
+    /** A directed offer addressed to {@code addressee}, expiring at {@code expiresTick}. */
+    static MarketOrder offer(MarketOrderId id, FactionId owner, FactionId addressee,
+                             long expiresTick) {
+        return new MarketOrder(id, SYS_A, owner, MarketSide.SELL,
+                PhysicalResource.MINERALS, 10.0, 1.0, 0L, expiresTick,
+                Optional.of(addressee), OrderStatus.OPEN);
     }
 
     /** ALPHA owns SYS_A (PLANET_A) and FLEET_A; BETA owns SYS_B / FLEET_B / ROUTE_B; SYS_NEUTRAL is unowned. */
@@ -143,12 +157,22 @@ final class Fixtures {
                 Map.of(OFFER_1, offer(OFFER_1, BETA)));
     }
 
+    /**
+     * The base state but with {@code OFFER_1} replaced by {@code customOffer}, so
+     * the directed-offer validator cases (wrong addressee, expired) can inject the
+     * exact offer they need without rebuilding the whole snapshot.
+     */
+    static GameState baseStateWithOffer(MarketOrder customOffer) {
+        GameState base = baseState();
+        return base.withMarketOrders(Map.of(customOffer.id(), customOffer));
+    }
+
     static BalanceProfile profile() {
         return new BalanceProfile(
                 "small-default", 1,
                 new BalanceProfile.Resources(Map.of(), Map.of(), 0.1),
                 new BalanceProfile.Population(1.0, 0.5, 0.1, 5, Map.of()),
-                new BalanceProfile.Market("priceTimePriority", 0.5),
+                new BalanceProfile.Market("priceTimePriority", 0.5, "ENERGY"),
                 new BalanceProfile.Construction(
                         Map.of("mine", 3),
                         Map.of("mine", new BalanceProfile.ResourceBundle(0, 50, 0, 0, 0))),

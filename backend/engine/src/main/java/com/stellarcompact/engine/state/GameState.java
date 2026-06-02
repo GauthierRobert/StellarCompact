@@ -101,4 +101,15 @@ public record GameState(
         return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
                 factions, systems, next, treaties, routes, marketOrders);
     }
+
+    /**
+     * Copy-on-write: a new snapshot whose entire market order book is replaced by
+     * {@code newOrders}. The market-matching step (E1-07) rebuilds the book once
+     * per tick (filled/partial/withdrawn orders updated together), so it replaces
+     * the whole map in one shot rather than inserting order by order.
+     */
+    public GameState withMarketOrders(Map<MarketOrderId, MarketOrder> newOrders) {
+        return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
+                factions, systems, fleets, treaties, routes, newOrders);
+    }
 }

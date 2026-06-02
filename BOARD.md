@@ -167,7 +167,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** golden tests cover surplus growth, deficit attrition, and population dynamics; no hardcoded constants.
 
 ### E1-07 · Market order book + escrow settlement
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/02-economy.md` §4
 - **Do:** Per-hub order book; **price-time-priority** matching each tick; clears at resting order's price; engine
   escrow prevents offering unowned/encumbered resources. Influence is **not** market-tradeable.

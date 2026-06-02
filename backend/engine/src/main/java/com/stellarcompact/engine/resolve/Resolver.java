@@ -132,11 +132,26 @@ public final class Resolver {
             case INTERDICTION -> resolveActionDriven(state, slice, ctx);
             case DEVELOPMENT -> resolveActionDriven(state, slice, ctx);
             case COLONISATION -> resolveActionDriven(state, slice, ctx);
-            case MARKET -> resolveActionDriven(state, slice, ctx);
+            case MARKET -> resolveMarket(state, slice, ctx);
             case PRODUCTION -> resolveProduction(state, ctx);
             case INFLUENCE -> resolveInfluence(state, ctx);
             case EVENTS -> resolveEvents(state, ctx);
         };
+    }
+
+    /**
+     * The MARKET step (E1-07). First folds the trade-action slice (the directed
+     * {@code ProposeTrade}/{@code AcceptTrade}/... handlers - settlement of accepted
+     * directed offers is wired through the same ledger), then runs the per-hub order
+     * book matcher over the resting {@link com.stellarcompact.engine.state.MarketOrder}
+     * book by price-time priority, escrowing every fill through the tick-wide ledger.
+     * Matching follows the action handlers so any orders an action placed/withdrew
+     * this tick are reflected before crossing.
+     */
+    private static GameState resolveMarket(GameState state, List<SubmittedAction> slice,
+                                           StepContext ctx) {
+        GameState afterActions = resolveActionDriven(state, slice, ctx);
+        return MarketResolution.resolve(afterActions, ctx.profile(), ctx.ledger());
     }
 
     /**

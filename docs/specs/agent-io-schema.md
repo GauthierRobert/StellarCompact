@@ -17,7 +17,7 @@ WorldView
   markets[]           : reachable hubs: { systemId, bestBids[], bestAsks[] }   // top-of-book only
   treaties[]          : active: { id, type, parties[], terms, expiresTick }
   reputations[]       : { factionId, reputation }                              // public ledger
-  pendingOffers[]     : addressed to me: { id, from, give, receive, expiresTick }
+  pendingOffers[]     : addressed to me: { id, from, give, receive, expiresTick } // directed offers whose addressee == me
   events[]            : public events since last tick: { type, parties[], systemId?, tick }
   inbox[]             : messages received: { from, text, tick }
 ```
@@ -80,7 +80,7 @@ The validator never trusts an agent-supplied id/owner/count; everything is check
 
 - **Kinetic war-state (E1-09).** A kinetic action (`Attack`/`Blockade`/`Raid`) requires a positive war-state OR a neutral (unowned) target. Absence of a forbidding treaty is *necessary but not sufficient* — an agent must not strike a faction it is at peace-but-not-treaty with. (E1-04 enforces the treaty-forbids half; the positive war-state gate awaits the war-state record in E1-09.)
 - **Lane adjacency / reachability (E2-03/E1-09).** `Explore`, `Colonize`, `MoveFleet` (incl. origin = the fleet's current location and each hop being a real lane), `EstablishRoute`, and "fleet positioned at target" for kinetic actions require the lane graph. Until then movement/adjacency is only shape-checked; the resolver MUST NOT move/fight on an unvalidated path.
-- **Directed trade offers (E1-07).** The `MarketOrder`/directed-offer record must carry an **addressee** and **`expiresTick`**. `AcceptTrade`/`DeclineTrade` are valid only for offers addressed to the actor and not expired (`OFFER_EXPIRED`). E1-04 checks existence/proposer-identity only; addressee+expiry await the E1-07 record.
+- **Directed trade offers (E1-07 — IMPLEMENTED).** The `MarketOrder`/directed-offer record carries an **`addressee`** (`Optional<FactionId>`) and an **`expiresTick`** (`long`). An *open* order-book limit order has `addressee = empty` (anyone may match it through the book); a *directed* peer-to-peer offer sets `addressee` to the single faction allowed to accept/decline it. `AcceptTrade`/`DeclineTrade` are valid only for offers whose `addressee` is the actor (a present addressee not equal to the actor, or an empty addressee on an Accept/Decline, is rejected `NOT_OWNED`/`TARGET_UNKNOWN`) **and** that have not expired — an offer is expired when `state.tick > expiresTick`, rejected `OFFER_EXPIRED`. `WithdrawTrade` still checks proposer-identity (the order's `faction`), not addressee. E1-04 checked existence/proposer-identity only; addressee + expiry are enforced from E1-07.
 - **Atomic escrow at resolution (E1-05).** Affordability is a per-action *snapshot* at validation time. The resolver must debit/escrow under a single authoritative pass so N validated spends in one tick cannot collectively overdraw one stockpile.
 
 ## 5. Structured-output strategy (Spring AI)

@@ -101,9 +101,9 @@ public final class ActionValidator {
             case Action.EstablishRoute a -> validateEstablishRoute(state, actor, a);
             case Action.SendMessage a -> validateSendMessage(state, actor, a);
             case Action.ProposeTrade a -> validateProposeTrade(state, actor, a);
-            case Action.AcceptTrade a -> validateTradeOfferReference(state, actor, a.offerId(), false);
-            case Action.DeclineTrade a -> validateTradeOfferReference(state, actor, a.offerId(), false);
-            case Action.WithdrawTrade a -> validateTradeOfferReference(state, actor, a.offerId(), true);
+            case Action.AcceptTrade a -> validateDirectedOffer(state, actor, a.offerId(), "accept");
+            case Action.DeclineTrade a -> validateDirectedOffer(state, actor, a.offerId(), "decline");
+            case Action.WithdrawTrade a -> validateWithdrawOffer(state, actor, a.offerId());
             case Action.ProposeTreaty a -> validateProposeTreaty(state, actor, a);
             case Action.AcceptTreaty a -> validateTreatyReference(state, actor, a.treatyId(), TreatyStatus.PROPOSED, "accept");
             case Action.DeclineTreaty a -> validateTreatyReference(state, actor, a.treatyId(), TreatyStatus.PROPOSED, "decline");
@@ -376,25 +376,55 @@ public final class ActionValidator {
     }
 
     /**
-     * Shared existence/ownership check for the three offer-by-id trade actions.
-     * The state {@link MarketOrder} is the nearest existing carrier of a pending
-     * offer; {@code requireOwner} forces the actor to be the order faction (Withdraw).
+     * Accept/Decline of a <em>directed</em> trade offer by id (E1-07 security
+     * prereq, spec section 4a). A directed offer must (1) exist, (2) be addressed
+     * to the actor - an offer with a different addressee, or an open order-book
+     * order with no addressee at all, is not the actor's to accept/decline - and
+     * (3) not be expired ({@code currentTick > expiresTick} -&gt;
+     * {@link RejectionReason#OFFER_EXPIRED}). All facts referenced (the offer's id
+     * the actor supplied, its addressee = the actor, its public expiry) are
+     * actor-knowable; nothing hidden leaks.
      */
-    private static ValidationResult validateTradeOfferReference(GameState state, FactionId actor,
-                                                               MarketOrderId offerId,
-                                                               boolean requireOwner) {
+    private static ValidationResult validateDirectedOffer(GameState state, FactionId actor,
+                                                          MarketOrderId offerId, String verb) {
         MarketOrder offer = state.marketOrders().get(offerId);
         if (offer == null) {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
                     "Trade offer " + offerId.value() + " does not exist.");
         }
-        if (requireOwner && !actor.equals(offer.faction())) {
+        // Addressed-to-me gate. An open book order (no addressee) is matched by the
+        // engine, not accepted/declined by id; either is rejected as not-yours.
+        if (offer.addressee().isEmpty() || !offer.addressee().get().equals(actor)) {
+            return ValidationResult.reject(RejectionReason.NOT_OWNED,
+                    "Trade offer " + offerId.value() + " is not addressed to you to "
+                            + verb + ".");
+        }
+        if (offer.isExpired(state.tick())) {
+            return ValidationResult.reject(RejectionReason.OFFER_EXPIRED,
+                    "Trade offer " + offerId.value() + " expired at tick "
+                            + offer.expiresTick() + " (now tick " + state.tick() + ").");
+        }
+        return ValidationResult.valid();
+    }
+
+    /**
+     * Withdraw of an offer the actor itself proposed. Checks existence and
+     * proposer-identity (the order's {@code faction}), not addressee - a proposer
+     * may withdraw its own open book order or its own directed offer. An expired
+     * offer may still be withdrawn (it is a tidy-up, not an acceptance), so no
+     * expiry gate here.
+     */
+    private static ValidationResult validateWithdrawOffer(GameState state, FactionId actor,
+                                                          MarketOrderId offerId) {
+        MarketOrder offer = state.marketOrders().get(offerId);
+        if (offer == null) {
+            return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
+                    "Trade offer " + offerId.value() + " does not exist.");
+        }
+        if (!actor.equals(offer.faction())) {
             return ValidationResult.reject(RejectionReason.NOT_OWNED,
                     "Trade offer " + offerId.value() + " was not proposed by you.");
         }
-        // TODO(E1-07): OFFER_EXPIRED - the state MarketOrder has no expiry tick and
-        // no addressee; the directed-offer record with an expiry/addressee lands in
-        // E1-07. Until then expiry and addressed-to-me cannot be soundly decided.
         return ValidationResult.valid();
     }
 

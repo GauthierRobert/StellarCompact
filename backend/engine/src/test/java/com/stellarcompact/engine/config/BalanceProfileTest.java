@@ -93,6 +93,7 @@ class BalanceProfileTest {
         assertNotNull(p.market(), "market");
         assertEquals("priceTimePriority", p.market().matchPolicy(), "matchPolicy");
         assertTrue(p.market().routeInfluencePerVolume() > 0.0, "routeInfluencePerVolume");
+        assertEquals("ENERGY", p.market().currency(), "market.currency");
 
         // construction
         assertNotNull(p.construction(), "construction");
@@ -179,7 +180,7 @@ class BalanceProfileTest {
                     "upkeep": { "mine": { "energy":1,"minerals":0,"food":0,"tech":0,"influence":0 } },
                     "deficitAttritionRate": 0.1 },
                   "population": { "growthPerFoodSurplus": 0.2, "capByBuilding": { "farm": 1 } },
-                  "market": { "matchPolicy": "priceTimePriority", "routeInfluencePerVolume": 0.5 },
+                  "market": { "matchPolicy": "priceTimePriority", "routeInfluencePerVolume": 0.5, "currency": "ENERGY" },
                   "construction": { "buildTimes": { "mine": 1 },
                     "costs": { "mine": { "energy":0,"minerals":1,"food":0,"tech":0,"influence":0 } } },
                   "combat": null,

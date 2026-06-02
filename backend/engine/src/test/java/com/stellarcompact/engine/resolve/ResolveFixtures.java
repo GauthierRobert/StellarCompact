@@ -52,7 +52,7 @@ final class ResolveFixtures {
                 "small-default", 1,
                 new BalanceProfile.Resources(Map.of(), Map.of(), 0.1),
                 new BalanceProfile.Population(1.0, 1.0, 0.1, 5, Map.of()),
-                new BalanceProfile.Market("priceTimePriority", 0.5),
+                new BalanceProfile.Market("priceTimePriority", 0.5, "ENERGY"),
                 new BalanceProfile.Construction(
                         Map.of("mine", 3),
                         Map.of("mine", new BalanceProfile.ResourceBundle(0, 50, 0, 0, 0))),

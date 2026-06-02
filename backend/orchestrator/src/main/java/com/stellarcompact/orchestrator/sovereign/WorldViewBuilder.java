@@ -94,12 +94,37 @@ public final class WorldViewBuilder {
      * everyone else's
      */
     public static WorldView build(GameState state, SystemAdjacency adjacency, FactionId self) {
+        return build(state, adjacency, self, List.of());
+    }
+
+    /**
+     * Build {@code self}'s fog-filtered {@link WorldView}, additionally delivering the
+     * negotiation {@code inbox} messages addressed to {@code self} (card E4-06).
+     *
+     * <p>The {@code inbox} is transient orchestration state, not engine state: free-text
+     * negotiation messages have no mechanical force (diplomacy 04 section 1), so they are
+     * never folded into {@link GameState} or the golden hash - the orchestrator routes
+     * them to the recipient and hands them here so the recipient simply <em>sees</em>
+     * them in its next perception. They are appended verbatim, in delivery order, to the
+     * view's {@link WorldView#inbox()}; everything else is the unchanged pure fog
+     * projection below. Passing an empty list yields exactly the no-inbox view.
+     *
+     * @param state     the complete authoritative snapshot (never {@code null})
+     * @param adjacency the lane adjacency for sensor-range visibility (or {@code NONE})
+     * @param self      the faction whose perception to build (must exist in {@code state})
+     * @param inbox     the negotiation messages addressed to {@code self} this phase, in
+     *                  delivery order (never {@code null}; empty = nothing delivered)
+     * @return the per-faction view, including any delivered negotiation messages
+     */
+    public static WorldView build(GameState state, SystemAdjacency adjacency, FactionId self,
+                                  List<WorldView.InboxMessage> inbox) {
         if (state == null) {
             throw new IllegalArgumentException("build.state must be set");
         }
         if (self == null) {
             throw new IllegalArgumentException("build.self must be set");
         }
+        List<WorldView.InboxMessage> deliveredInbox = inbox == null ? List.of() : List.copyOf(inbox);
         SystemAdjacency lanes = adjacency == null ? SystemAdjacency.NONE : adjacency;
         Faction me = state.factions().get(self);
         if (me == null) {
@@ -170,11 +195,12 @@ public final class WorldViewBuilder {
                 .map(o -> new WorldView.OfferView(o.id(), o.faction(), o.expiresTick()))
                 .toList();
 
-        // events / inbox: the orchestrator's public-event and negotiation feeds
-        // populate these in later cards. From raw GameState there is nothing to
-        // leak, so this builder emits none.
+        // events: the orchestrator's public-event feed populates these in a later card;
+        // from raw GameState there is nothing to leak, so this builder emits none.
+        // inbox: the negotiation feed (E4-06) delivers free-text messages addressed to
+        // this faction; they are transient and effect-free, appended verbatim here.
         return new WorldView(state.tick(), selfView, ownSystems, ownFleets, neighbours,
-                treaties, reputations, pendingOffers, List.of(), List.of());
+                treaties, reputations, pendingOffers, List.of(), deliveredInbox);
     }
 
     /** Convenience overload: build with no lane graph (adjacency reveals nothing). */

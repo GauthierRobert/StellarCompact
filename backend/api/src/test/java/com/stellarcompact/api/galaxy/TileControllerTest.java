@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,13 +29,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TileControllerTest {
 
     private MockMvc mvc;
+    private TileCache cache;
 
     @BeforeEach
     void setUp() {
-        TileCache cache = new TileCache(
+        cache = new TileCache(
                 new TileGenerator(), new ActiveSystemIndex.NoActiveSystems());
         mvc = MockMvcBuilders
-                .standaloneSetup(new TileController(cache))
+                .standaloneSetup(new TileController(cache, new TilePrebakeService(cache)))
                 .build();
     }
 
@@ -127,6 +129,53 @@ class TileControllerTest {
     void outOfRangeCoordIs400() throws Exception {
         // level 1 has 2 tiles per axis, so x=5 is invalid.
         mvc.perform(get("/api/galaxy/{seed}/tile/{l}/{x}/{y}", 1L, 1, 5, 0))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---- pre-bake / CDN warming (E8-07) ----
+
+    @Test
+    void prebakeWarmsCoarseLevelsAndActiveRegionAndReportsCounts() throws Exception {
+        mvc.perform(post("/api/galaxy/{seed}/prebake", 555L)
+                        .param("level", "4")
+                        .param("minX", "-100").param("minY", "-100")
+                        .param("maxX", "100").param("maxY", "100"))
+                .andExpect(status().isOk())
+                // 21 coarse tiles for STAR_LIST_MIN_LEVEL=3 (1+4+16).
+                .andExpect(jsonPath("$.coarseTiles").value(21))
+                .andExpect(jsonPath("$.activeTiles").value(Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.totalTiles").value(Matchers.greaterThan(21)))
+                // Not a cacheable artifact: warming reports are volatile.
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL,
+                        Matchers.containsString("no-store")));
+    }
+
+    @Test
+    void afterPrebakeSubsequentTileRequestsAreCacheHits() throws Exception {
+        // A coarse tile is cold before warming...
+        assertThat(cache.isCached(555L, 0, 0, 0)).isFalse();
+        mvc.perform(post("/api/galaxy/{seed}/prebake", 555L)
+                        .param("level", "4")
+                        .param("minX", "-50").param("minY", "-50")
+                        .param("maxX", "50").param("maxY", "50"))
+                .andExpect(status().isOk());
+        // ...and warm afterwards (the common views are hot -> CDN/cache hits).
+        assertThat(cache.isCached(555L, 0, 0, 0)).isTrue();
+        // The subsequent live GET still serves the immutable/ETag CDN headers.
+        mvc.perform(get("/api/galaxy/{seed}/tile/{l}/{x}/{y}", 555L, 0, 0, 0))
+                .andExpect(status().isOk())
+                .andExpect(header().exists(HttpHeaders.ETAG))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL,
+                        Matchers.containsString("immutable")));
+    }
+
+    @Test
+    void prebakeRejectsACoarseLevelWith400() throws Exception {
+        // Level 2 is a coarse aggregate level; the active region must be fine.
+        mvc.perform(post("/api/galaxy/{seed}/prebake", 1L)
+                        .param("level", "2")
+                        .param("minX", "0").param("minY", "0")
+                        .param("maxX", "1").param("maxY", "1"))
                 .andExpect(status().isBadRequest());
     }
 }

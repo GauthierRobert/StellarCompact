@@ -53,6 +53,20 @@ Caching / conditional-GET contract (MUST):
   ETag and Cache-Control headers and no body.
 - Tiles are never persisted; the cache is a pure-CDN/client optimisation (lod-tiling invariant).
 
+Pre-bake / CDN warming (E8-07 — populate the common views' cache):
+```
+POST /api/galaxy/{gameSeed}/prebake?level=L&minX&minY&maxX&maxY
+    → 200 { coarseTiles, activeTiles, totalTiles }   (Cache-Control: no-store)
+```
+- Warms (a) every coarse aggregate level `0..(STAR_LIST_MIN_LEVEL-1)` (fixed, tiny set) and (b) the
+  fine star-list tiles overlapping the active-region world bbox at `level` (which MUST be a
+  star-list level `>= STAR_LIST_MIN_LEVEL`, else `400`), hard-capped by `MAX_ACTIVE_TILES` (1024)
+  so the warm never iterates the catalog.
+- Warming is a `TileCache.get` against the same generate-on-miss cache the GET handler reads, so it
+  only triggers the same deterministic generation a live request would (no galaxy mutation). After
+  a warm, the matching `GET .../tile/...` (and the CDN in front) are cache hits and still carry the
+  identical `immutable` + ETag headers — the pre-bake does not alter tile responses or break caching.
+
 Active-state overlay (separate, thin, dynamic — NOT baked into star tiles):
 ```
 GET /api/galaxy/{gameId}/overlay?bbox=minX,minY,maxX,maxY&sinceTick=N

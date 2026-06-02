@@ -76,6 +76,25 @@ export const CAMERA_ZMAX = 15;
 /** Default galaxy radius — matches PoC seed R_MAX; updated from tile metadata when E7-03 lands. */
 export const GALAXY_R_MAX_DEFAULT = 8000;
 
+/**
+ * Floating-origin re-base threshold (E8-07), expressed in *screen pixels*.
+ *
+ * The GPU renders `(world - origin) * scalePx`. Both `world` and `origin` reach
+ * the shader as float32 (~24-bit mantissa, ~7 significant decimal digits). When
+ * the camera sits far from the origin AND we are zoomed deep, the float32
+ * product loses precision (large value, tiny visible delta) and the star field
+ * shimmers/quantises. We keep the *pixel* magnitude of the camera offset from
+ * the origin bounded: re-base whenever `|camWorld - origin| * scalePx` exceeds
+ * this many pixels. Because the threshold is in pixels, it adapts to zoom — at
+ * deep zoom (huge scalePx) a tiny world drift triggers a re-base; zoomed out it
+ * essentially never fires (origin stays 0, matching pre-E8-07 behaviour).
+ *
+ * 16384 px ≈ a handful of 4K screens of drift — small enough that the
+ * float32-relative precision of any on-screen coordinate stays well under a
+ * sub-pixel, large enough that re-bases are infrequent (a few per long pan).
+ */
+export const ORIGIN_REBASE_PX = 16384;
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -104,10 +123,28 @@ export class CameraStore {
     vy: 0,
   });
 
+  /**
+   * Floating-origin world anchor (E8-07). World coordinates are expressed
+   * relative to this point before being uploaded to the float32 GPU buffers, so
+   * rendered magnitudes stay small at deep zoom. Re-based in stepFrame whenever
+   * the camera drifts beyond ORIGIN_REBASE_PX (see rebaseOrigin). Held in a
+   * dedicated signal so a re-base does NOT churn the camera-state signal (the
+   * pan/zoom values are byte-identical across a re-base — it is transparent).
+   */
+  private readonly _origin = signal<Vec2>({ x: 0, y: 0 });
+
   // ---- public read-only signals ----
 
   readonly state = this._cam.asReadonly();
   readonly viewport = this._viewport.asReadonly();
+
+  /**
+   * Current floating-origin world anchor (E8-07). The renderer subtracts this
+   * from world coords (and from the recovered camera world) before the float32
+   * GPU upload. Consumers that work in float64 on the CPU (the w2s/s2w pixel
+   * transforms, tile-fetch bbox) ignore it — it is purely a GPU-precision aid.
+   */
+  readonly origin = this._origin.asReadonly();
 
   // ---- computed signals ----
 
@@ -286,6 +323,43 @@ export class CameraStore {
 
       return { x, y, z, tx, ty, tz, vx, vy };
     });
+
+    // 5: floating-origin re-base (E8-07). Done AFTER the camera settles so we
+    // re-base around the rendered position. Transparent: changes only the GPU
+    // reference frame, never the on-screen result (see rebaseOrigin).
+    this.maybeRebaseOrigin();
+  }
+
+  /**
+   * Floating-origin re-base (E8-07). Re-centre the GPU world origin on the
+   * rendered camera position when the camera has drifted more than
+   * ORIGIN_REBASE_PX pixels from the current origin, so the float32 magnitudes
+   * the GPU sees (`(world - origin) * scalePx`) stay bounded at deep zoom.
+   *
+   * This is purely a change of reference frame: the camera pan/zoom signals are
+   * untouched, the w2s/s2w CPU transforms (float64) are untouched, so the
+   * on-screen projection is byte-identical before and after. Only the `origin`
+   * signal moves; the renderer subtracts it equally from star and camera world.
+   */
+  private maybeRebaseOrigin(): void {
+    const { x, y } = this._cam();
+    const scalePx = this.scale() * this._viewport().dpr;
+    const o = this._origin();
+    const driftPx = Math.hypot(x - o.x, y - o.y) * scalePx;
+    if (driftPx > ORIGIN_REBASE_PX) {
+      // Re-base exactly onto the rendered camera so the offset resets to 0.
+      this._origin.set({ x, y });
+    }
+  }
+
+  /**
+   * Force the floating origin onto the current rendered camera position
+   * (E8-07). Exposed for tests / explicit resets; stepFrame calls the throttled
+   * `maybeRebaseOrigin` automatically every frame.
+   */
+  rebaseOrigin(): void {
+    const { x, y } = this._cam();
+    this._origin.set({ x, y });
   }
 
   /**

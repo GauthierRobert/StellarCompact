@@ -423,6 +423,7 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
     const scale = this.camera.scale();
     const { dpr, cssWidth, cssHeight } = this.camera.viewport();
     const w2s = this.camera.w2s();
+    const origin = this.camera.origin();
     const widthPx = Math.round(cssWidth * dpr);
     const heightPx = Math.round(cssHeight * dpr);
     return {
@@ -435,6 +436,13 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
         x: w2s.x(wx) * dpr,
         y: w2s.y(wy) * dpr,
       }),
+      // Floating-origin anchor (E8-07): the WebGL layer subtracts this from
+      // world coords (in float64) before the float32 upload to hold precision
+      // at deep zoom. The w2s above is computed on the CPU in float64 and is
+      // unaffected — it stays byte-identical across a re-base, so the re-base is
+      // visually transparent.
+      originX: origin.x,
+      originY: origin.y,
     };
   }
 }

@@ -1,5 +1,6 @@
 package com.stellarcompact.api.galaxy;
 
+import com.stellarcompact.galaxy.gen.GalaxyConstants;
 import com.stellarcompact.galaxy.tile.QuadTileScheme;
 import com.stellarcompact.galaxy.tile.TileBounds;
 
@@ -63,6 +64,27 @@ public final class TileGrid {
     public static Bbox bbox(int level, long x, long y) {
         TileBounds b = QuadTileScheme.bounds(level, x, y);
         return new Bbox(b.minX(), b.minY(), b.maxX(), b.maxY());
+    }
+
+    /**
+     * The tile index on one axis containing world coordinate {@code w} at
+     * {@code level} - the inverse of {@link #bbox} (the whole galaxy lives in
+     * {@code [-R_MAX, R_MAX]}, diced into {@code 2^level} tiles per axis). Used by
+     * the pre-bake/warm path (E8-07) to map an active-region bbox to the tile
+     * addresses covering it. Clamped to {@code [0, tilesPerAxis-1]} so a query at
+     * or just past the galaxy edge stays a legal address.
+     */
+    public static long tileIndexForWorld(int level, double w) {
+        long n = tilesPerAxis(level);
+        double side = tileSide(level);
+        long i = (long) Math.floor((w + GalaxyConstants.R_MAX) / side);
+        if (i < 0) {
+            return 0;
+        }
+        if (i > n - 1) {
+            return n - 1;
+        }
+        return i;
     }
 
     /** An axis-aligned bounding box in galaxy units (the api DTO shape). */

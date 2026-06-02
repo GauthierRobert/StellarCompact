@@ -842,6 +842,15 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     if (count === 0) {
       return;
     }
+    // Floating origin (E8-07): subtract the camera-tracked world anchor from
+    // BOTH the star positions and the camera world HERE, in float64 on the CPU,
+    // before the values are narrowed to float32 in the instance buffer / camera
+    // uniform. The shader then computes `(aWorld - uCamWorld) * scalePx` on small
+    // origin-relative magnitudes, so deep-zoom precision holds. Subtracting the
+    // SAME origin from both operands leaves the on-screen result unchanged, so a
+    // re-base (origin jumping to track the camera) is visually transparent.
+    const originX = view.originX ?? 0;
+    const originY = view.originY ?? 0;
     this.ensureCapacity(count);
     const buf = this.data;
     let o = 0;
@@ -850,8 +859,8 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
       // LOD cross-fade weight (default 1): scales perceptual brightness so an
       // outgoing/incoming tile level fades by alpha and never pops (E8-05).
       const fade = st.a === undefined ? 1 : st.a;
-      buf[o] = st.x;
-      buf[o + 1] = st.y;
+      buf[o] = st.x - originX;
+      buf[o + 1] = st.y - originY;
       buf[o + 2] = c[0] / 255;
       buf[o + 3] = c[1] / 255;
       buf[o + 4] = c[2] / 255;
@@ -863,8 +872,8 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     }
     for (const ag of scene.aggregates) {
       const fade = ag.a === undefined ? 1 : ag.a;
-      buf[o] = ag.x;
-      buf[o + 1] = ag.y;
+      buf[o] = ag.x - originX;
+      buf[o + 1] = ag.y - originY;
       buf[o + 2] = 0.78;
       buf[o + 3] = 0.8;
       buf[o + 4] = 1.0;
@@ -885,7 +894,8 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     );
 
     gl.useProgram(this.program);
-    gl.uniform2f(this.uCamWorld, camX, camY);
+    // Camera world in the SAME origin-relative frame as the star buffer above.
+    gl.uniform2f(this.uCamWorld, camX - originX, camY - originY);
     gl.uniform1f(this.uScalePx, scalePx);
     gl.uniform2f(this.uViewportPx, view.widthPx, view.heightPx);
     if (this.uTime) {

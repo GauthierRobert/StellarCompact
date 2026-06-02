@@ -45,11 +45,20 @@ describe('recoverCamWorld', () => {
 interface FakeGl {
   instancedCalls: { mode: number; first: number; vcount: number; icount: number }[];
   lastBufferDataBytes: number;
+  /** Last full float payload uploaded via bufferData (a copy). */
+  lastInstanceFloats: number[] | null;
+  /** Every uniform2f(loc,a,b) call as [a,b] pairs, in order. */
+  uniform2fCalls: [number, number][];
 }
 
 /** Minimal WebGL2 stub: records the instanced draw + uploaded sizes. */
 function fakeWebgl2(): { gl: WebGL2RenderingContext; rec: FakeGl } {
-  const rec: FakeGl = { instancedCalls: [], lastBufferDataBytes: 0 };
+  const rec: FakeGl = {
+    instancedCalls: [],
+    lastBufferDataBytes: 0,
+    lastInstanceFloats: null,
+    uniform2fCalls: [],
+  };
   let uniformLoc = 0;
   const gl = {
     VERTEX_SHADER: 1,
@@ -87,6 +96,9 @@ function fakeWebgl2(): { gl: WebGL2RenderingContext; rec: FakeGl } {
     bufferData: (_t: number, data: ArrayBufferView | number) => {
       if (typeof data !== 'number') {
         rec.lastBufferDataBytes = data.byteLength;
+        if (data instanceof Float32Array) {
+          rec.lastInstanceFloats = Array.from(data);
+        }
       }
     },
     enableVertexAttribArray: () => undefined,
@@ -99,7 +111,9 @@ function fakeWebgl2(): { gl: WebGL2RenderingContext; rec: FakeGl } {
     clear: () => undefined,
     viewport: () => undefined,
     useProgram: () => undefined,
-    uniform2f: () => undefined,
+    uniform2f: (_loc: unknown, a: number, b: number) => {
+      rec.uniform2fCalls.push([a, b]);
+    },
     uniform1f: () => undefined,
     drawArraysInstanced: (mode: number, first: number, vcount: number, icount: number) => {
       rec.instancedCalls.push({ mode, first, vcount, icount });
@@ -165,6 +179,46 @@ describe('WebglDrawLayer', () => {
     expect(call.icount).toBe(1050); // 1000 stars + 50 aggregates, one buffer
     // 1050 instances * 9 floats * 4 bytes uploaded in a single bufferData.
     expect(rec.lastBufferDataBytes).toBe(1050 * 9 * 4);
+    layer.dispose();
+  });
+
+  it('subtracts the floating origin from star + camera world (E8-07)', () => {
+    const { gl, rec } = fakeWebgl2();
+    const layer = new WebglDrawLayer(fakeCanvas(gl));
+    layer.resize(800, 600, 1);
+    // origin (0,0): the recovered camera world for this view is (0,0), and the
+    // first star sits at world (1,-1).
+    layer.draw(scene(3, 0), view, 0);
+    const baselineStar0 = [
+      rec.lastInstanceFloats![0],
+      rec.lastInstanceFloats![1],
+    ];
+    // uCamWorld is the first uniform2f issued in the star pass.
+    const baselineCam = rec.uniform2fCalls[0];
+
+    // Re-render the SAME scene with a non-zero floating origin.
+    rec.uniform2fCalls = [];
+    const originX = 1_000_000;
+    const originY = -500_000;
+    layer.draw(scene(3, 0), { ...view, originX, originY }, 0);
+    const shiftedStar0 = [
+      rec.lastInstanceFloats![0],
+      rec.lastInstanceFloats![1],
+    ];
+    const shiftedCam = rec.uniform2fCalls[0];
+
+    // Both the buffered star position and the camera uniform are shifted by
+    // exactly -origin, so the shader's `(aWorld - uCamWorld)` is unchanged ->
+    // the re-base is transparent on screen.
+    expect(shiftedStar0[0]).toBeCloseTo(baselineStar0[0] - originX, 1);
+    expect(shiftedStar0[1]).toBeCloseTo(baselineStar0[1] - originY, 1);
+    expect(shiftedCam[0]).toBeCloseTo(baselineCam[0] - originX, 1);
+    expect(shiftedCam[1]).toBeCloseTo(baselineCam[1] - originY, 1);
+    // The difference (what the shader actually uses) is preserved.
+    expect(shiftedStar0[0] - shiftedCam[0]).toBeCloseTo(
+      baselineStar0[0] - baselineCam[0],
+      4,
+    );
     layer.dispose();
   });
 

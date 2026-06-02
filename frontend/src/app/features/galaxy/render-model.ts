@@ -117,6 +117,35 @@ export interface RenderColorStats {
   readonly sampleCount: number;
 }
 
+/**
+ * A single active-overlay mark to composite ON TOP of a rendered star (E8-06).
+ *
+ * Built by joining an `OverlayStore` `SystemOverlay` to the rendered star that
+ * carries the matching `activeSystemId` (join-by-system-id), so the mark always
+ * sits at the star's *world* position. The renderer draws these in a separate
+ * compositing pass over the instanced star field — the heavy star tiles never
+ * carry this live state (they stay CDN-cacheable; see lod-tiling skill).
+ *
+ * Fog-correctness: a mark only exists when the overlay store (already
+ * server-authoritative + fog-filtered) contains the system. The client never
+ * infers ownership/fleets for systems the server did not disclose.
+ */
+export interface RenderOverlayMark {
+  /** Joined active system id (string form, matches SystemOverlay.systemId). */
+  readonly systemId: string;
+  /** World position (copied from the joined star) — never recomputed. */
+  readonly x: number;
+  readonly y: number;
+  /** Ownership tint RGB 0..1 from the controlling faction, or null if unclaimed. */
+  readonly tint: readonly [number, number, number] | null;
+  /** Activity level 0..2 (scales the marker glow). */
+  readonly activity: number;
+  /** Live fleet/battle marker present at this system. */
+  readonly battle: boolean;
+  /** Under blockade (drawn as a ring marker). */
+  readonly blockaded: boolean;
+}
+
 /** A trade-lane overlay segment (world endpoints already resolved). */
 export interface RenderRoute {
   readonly id: string;
@@ -139,6 +168,13 @@ export interface RenderScene {
   readonly stars: readonly RenderStar[];
   readonly aggregates: readonly RenderAggregate[];
   readonly routes: readonly RenderRoute[];
+  /**
+   * Active-overlay marks (ownership tint / fleet+battle / blockade), one per
+   * visible active system present in the overlay store, joined by system id and
+   * composited ON TOP of the star field (E8-06). Empty when there is no live
+   * overlay state in view. Defaults to `[]` for pre-E8-06 scene builders.
+   */
+  readonly overlayMarks?: readonly RenderOverlayMark[];
   /** Galaxy radius (world units) for the nebula glow + dust arms. */
   readonly rMax: number;
 }

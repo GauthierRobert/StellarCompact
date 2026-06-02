@@ -60,6 +60,7 @@ export class CanvasDrawLayer implements GalaxyDrawLayer {
     this.drawRoutes(ctx, scene, view, s, timeSeconds);
     this.drawStars(ctx, scene, view, s, timeSeconds);
     this.drawSystems(ctx, scene, view, s, timeSeconds);
+    this.drawOverlayMarks(ctx, scene, view, s, timeSeconds);
   }
 
   dispose(): void {
@@ -244,6 +245,78 @@ export class CanvasDrawLayer implements GalaxyDrawLayer {
       ctx.beginPath();
       ctx.arc(fx, fy, 1.8 * DPR, 0, 7);
       ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * Active-overlay compositing (E8-06): ownership tint / fleet+battle / blockade
+   * marks drawn ON TOP of the star field. The marks were joined to their stars
+   * by system id upstream (overlay-layer); here we just draw the accent at each
+   * mark's world position. Fog-correct: only marks the server-fed overlay store
+   * produced exist in scene.overlayMarks — nothing hidden is drawn.
+   */
+  private drawOverlayMarks(
+    ctx: CanvasRenderingContext2D,
+    scene: RenderScene,
+    view: ViewTransform,
+    s: number,
+    now: number,
+  ): void {
+    const marks = scene.overlayMarks;
+    if (!marks || marks.length === 0) {
+      return;
+    }
+    const W = view.widthPx;
+    const H = view.heightPx;
+    const r = Math.max(6 * view.dpr, Math.min(42 * view.dpr, s * 4));
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const m of marks) {
+      const p = view.w2s(m.x, m.y);
+      if (p.x < -r || p.x > W + r || p.y < -r || p.y > H + r) {
+        continue;
+      }
+      // Ownership tint: a soft halo ring around the star.
+      if (m.tint) {
+        const [cr, cg, cb] = m.tint;
+        const R = Math.round(cr * 255);
+        const G = Math.round(cg * 255);
+        const B = Math.round(cb * 255);
+        const amp = 0.28 + 0.1 * Math.min(2, m.activity);
+        const g = ctx.createRadialGradient(p.x, p.y, r * 0.3, p.x, p.y, r);
+        g.addColorStop(0, `rgba(${R},${G},${B},0)`);
+        g.addColorStop(0.55, `rgba(${R},${G},${B},${amp})`);
+        g.addColorStop(1, `rgba(${R},${G},${B},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, 7);
+        ctx.fill();
+      }
+      // Battle: red pulsing core.
+      if (m.battle) {
+        const pulse = 0.6 + 0.4 * Math.sin(now * 6);
+        ctx.globalAlpha = pulse * 0.8;
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 0.5);
+        g.addColorStop(0, 'rgba(255,70,50,0.9)');
+        g.addColorStop(1, 'rgba(255,70,50,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 0.5, 0, 7);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // Blockade: a thin amber ring.
+      if (m.blockaded) {
+        ctx.globalAlpha = 0.8;
+        ctx.strokeStyle = 'rgba(255,184,64,0.9)';
+        ctx.lineWidth = Math.max(1, 1.5 * view.dpr);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 0.78, 0, 7);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
     }
     ctx.restore();
     ctx.globalAlpha = 1;

@@ -60,6 +60,10 @@ const FLOATS_PER_INSTANCE = 9;
 // 8 floats per planet instance: cx, cy (screen px), radius (px), r,g,b, alpha, lightAngle.
 const FLOATS_PER_PLANET = 8;
 
+// 8 floats per overlay mark: cx, cy (screen px), radius (px), r,g,b, flags, activity.
+// flags packs battle (bit0) + blockade (bit1) + hasTint (bit2) for the marker.
+const FLOATS_PER_OVERLAY = 8;
+
 // Bloom is computed at 1/BLOOM_DOWNSAMPLE resolution to bound blur cost.
 const BLOOM_DOWNSAMPLE = 4;
 
@@ -409,6 +413,83 @@ void main() {
 }
 `;
 
+// --- Active overlay compositing (E8-06) -----------------------------------
+
+// Ownership tint / fleet+battle / blockade marks, composited ON TOP of the star
+// field in a dedicated instanced pass. Each mark is a quad centred on the joined
+// star's screen position; the fragment shader draws a soft ownership glow plus a
+// battle pulse and/or a blockade ring. Additive (premultiplied) so it reads as a
+// luminous accent on the black void without occluding the underlying star.
+const OVERLAY_VERT = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;     // unit quad [-1,1]
+layout(location = 1) in vec2 aCenter;     // screen px (joined star position)
+layout(location = 2) in float aRadius;    // marker radius px
+layout(location = 3) in vec3 aColor;      // ownership tint rgb 0..1
+layout(location = 4) in float aFlags;     // bit0 battle, bit1 blockade, bit2 hasTint
+layout(location = 5) in float aActivity;  // 0..2 activity level
+uniform vec2 uViewportPx;
+out vec2 vLocal;
+out vec3 vColor;
+out float vFlags;
+out float vActivity;
+void main() {
+  vec2 px = aCenter + aCorner * aRadius;
+  vec2 clip = (px / uViewportPx) * 2.0 - 1.0;
+  clip.y = -clip.y;
+  gl_Position = vec4(clip, 0.0, 1.0);
+  vLocal = aCorner;
+  vColor = aColor;
+  vFlags = aFlags;
+  vActivity = aActivity;
+}
+`;
+
+const OVERLAY_FRAG = `#version 300 es
+precision highp float;
+in vec2 vLocal;
+in vec3 vColor;
+in float vFlags;
+in float vActivity;
+out vec4 outColor;
+uniform float uTime;
+void main() {
+  float d = length(vLocal);              // 0 centre .. 1 quad edge
+  if (d > 1.0) { discard; }
+  bool battle = mod(floor(vFlags + 0.5), 2.0) >= 1.0;
+  bool blockade = mod(floor(vFlags * 0.5 + 0.5), 2.0) >= 1.0;
+  bool hasTint = mod(floor(vFlags * 0.25 + 0.5), 2.0) >= 1.0;
+
+  vec3 acc = vec3(0.0);
+
+  // Ownership tint: a soft halo ring around the star (does not wash the core),
+  // intensity gently scaled by activity so busy systems read brighter.
+  if (hasTint) {
+    float ring = smoothstep(0.55, 0.30, d) - smoothstep(0.30, 0.0, d);
+    float glow = (1.0 - d) * (1.0 - d) * 0.35;
+    float amp = 0.45 + 0.18 * clamp(vActivity, 0.0, 2.0);
+    acc += vColor * (ring * 0.9 + glow) * amp;
+  }
+
+  // Battle: red pulsing accent.
+  if (battle) {
+    float pulse = 0.6 + 0.4 * sin(uTime * 6.0);
+    float core = smoothstep(0.4, 0.0, d);
+    acc += vec3(1.0, 0.25, 0.18) * core * pulse * 0.9;
+  }
+
+  // Blockade: a thin amber ring near the quad edge.
+  if (blockade) {
+    float ring = smoothstep(0.04, 0.0, abs(d - 0.78));
+    acc += vec3(1.0, 0.72, 0.25) * ring * 0.8;
+  }
+
+  float a = clamp(max(max(acc.r, acc.g), acc.b), 0.0, 1.0);
+  // Premultiplied additive output (blend func ONE, ONE).
+  outColor = vec4(acc, a);
+}
+`;
+
 /** One offscreen colour target (texture + framebuffer) at a given size. */
 interface Fbo {
   fb: WebGLFramebuffer;
@@ -436,11 +517,15 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
   private blurProg: WebGLProgram | null = null;
   private compositeProg: WebGLProgram | null = null;
   private planetProg: WebGLProgram | null = null;
+  private overlayProg: WebGLProgram | null = null;
 
   private postVao: WebGLVertexArrayObject | null = null;
   private planetVao: WebGLVertexArrayObject | null = null;
   private planetQuadBuf: WebGLBuffer | null = null;
   private planetInstanceBuf: WebGLBuffer | null = null;
+  private overlayVao: WebGLVertexArrayObject | null = null;
+  private overlayQuadBuf: WebGLBuffer | null = null;
+  private overlayInstanceBuf: WebGLBuffer | null = null;
 
   private sceneFbo: Fbo | null = null;
   private bloomA: Fbo | null = null;
@@ -452,6 +537,9 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
   /** Reused planet staging buffer. */
   private planetData = new Float32Array(0);
   private planetCapacity = 0;
+  /** Reused overlay-mark staging buffer. */
+  private overlayData = new Float32Array(0);
+  private overlayCapacity = 0;
 
   private widthPx = 0;
   private heightPx = 0;
@@ -567,6 +655,7 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
       this.blurProg = linkProgram(gl, FULLSCREEN_VERT, BLUR_FRAG);
       this.compositeProg = linkProgram(gl, FULLSCREEN_VERT, COMPOSITE_FRAG);
       this.planetProg = linkProgram(gl, PLANET_VERT, PLANET_FRAG);
+      this.overlayProg = linkProgram(gl, OVERLAY_VERT, OVERLAY_FRAG);
 
       // Empty VAO drives the gl_VertexID fullscreen triangle.
       this.postVao = gl.createVertexArray();
@@ -594,6 +683,32 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
       for (const [loc, size, off] of pdesc) {
         gl.enableVertexAttribArray(loc);
         gl.vertexAttribPointer(loc, size, gl.FLOAT, false, pstride, off * 4);
+        gl.vertexAttribDivisor(loc, 1);
+      }
+      gl.bindVertexArray(null);
+
+      // Overlay-mark instancing VAO: shared unit quad + per-mark buffer.
+      this.overlayVao = gl.createVertexArray();
+      gl.bindVertexArray(this.overlayVao);
+      this.overlayQuadBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.overlayQuadBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      this.overlayInstanceBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.overlayInstanceBuf);
+      const ostride = FLOATS_PER_OVERLAY * 4;
+      // loc1 center(2), loc2 radius(1), loc3 color(3), loc4 flags(1), loc5 activity(1)
+      const odesc: readonly [number, number, number][] = [
+        [1, 2, 0],
+        [2, 1, 2],
+        [3, 3, 3],
+        [4, 1, 6],
+        [5, 1, 7],
+      ];
+      for (const [loc, size, off] of odesc) {
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, ostride, off * 4);
         gl.vertexAttribDivisor(loc, 1);
       }
       gl.bindVertexArray(null);
@@ -640,6 +755,8 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
       if (count > 0) {
         this.drawStarPass(gl, scene, view, camX, camY, scalePx, timeSeconds);
       }
+      // Overlay marks still composite in the no-bloom fallback path (E8-06).
+      this.drawOverlay(gl, scene, view, scalePx, timeSeconds);
       return;
     }
 
@@ -661,6 +778,10 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
 
     // Pass 3: lit planets for active systems (zoom-gated; empty -> no work).
     this.drawPlanets(gl, scene, view, scalePx, timeSeconds);
+
+    // Pass 3b: active-overlay marks (ownership tint / fleet+battle / blockade),
+    // composited on top of the star field; additive so they bloom too (E8-06).
+    this.drawOverlay(gl, scene, view, scalePx, timeSeconds);
 
     // --- Pass 4: bright-pass into the 1/4-res bloomA. -----------------------
     const a = this.bloomA as Fbo;
@@ -906,6 +1027,76 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     gl.blendFunc(gl.ONE, gl.ONE);
   }
 
+  /**
+   * Active-overlay compositing pass (E8-06). Draws the join-by-system-id marks
+   * (ownership tint / fleet+battle / blockade) on top of the star field as ONE
+   * instanced draw call. Bounded by the visible active systems present in the
+   * overlay (never the catalog). Empty overlay -> zero work. Fog-correctness is
+   * upstream: the marks only exist for systems the server-fed overlay disclosed.
+   */
+  private drawOverlay(
+    gl: WebGL2RenderingContext,
+    scene: RenderScene,
+    view: ViewTransform,
+    scalePx: number,
+    timeSeconds: number,
+  ): void {
+    const marks = scene.overlayMarks;
+    if (!this.overlayProg || !marks || marks.length === 0) {
+      return;
+    }
+    const W = view.widthPx;
+    const H = view.heightPx;
+    // Marker radius grows gently with zoom so it stays a readable accent without
+    // ballooning; clamped at both ends (point-like discipline).
+    const radius = Math.max(6 * view.dpr, Math.min(42 * view.dpr, scalePx * 4));
+
+    this.ensureOverlayCapacity(marks.length);
+    const buf = this.overlayData;
+    let o = 0;
+    let written = 0;
+    for (const m of marks) {
+      const p = view.w2s(m.x, m.y);
+      if (p.x < -radius || p.x > W + radius || p.y < -radius || p.y > H + radius) {
+        continue;
+      }
+      const tint = m.tint;
+      const hasTint = tint !== null;
+      const flags =
+        (m.battle ? 1 : 0) + (m.blockaded ? 2 : 0) + (hasTint ? 4 : 0);
+      if (flags === 0) {
+        continue; // nothing to draw for this system
+      }
+      buf[o] = p.x;
+      buf[o + 1] = p.y;
+      buf[o + 2] = radius;
+      buf[o + 3] = hasTint ? (tint as readonly number[])[0] : 0;
+      buf[o + 4] = hasTint ? (tint as readonly number[])[1] : 0;
+      buf[o + 5] = hasTint ? (tint as readonly number[])[2] : 0;
+      buf[o + 6] = flags;
+      buf[o + 7] = m.activity;
+      o += FLOATS_PER_OVERLAY;
+      written++;
+    }
+    if (written === 0) {
+      return;
+    }
+
+    gl.blendFunc(gl.ONE, gl.ONE); // additive accent on the void
+    gl.bindVertexArray(this.overlayVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.overlayInstanceBuf);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      buf.subarray(0, written * FLOATS_PER_OVERLAY),
+      gl.DYNAMIC_DRAW,
+    );
+    gl.useProgram(this.overlayProg);
+    gl.uniform2f(loc(gl, this.overlayProg, 'uViewportPx'), W, H);
+    gl.uniform1f(loc(gl, this.overlayProg, 'uTime'), timeSeconds);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, written);
+    gl.bindVertexArray(null);
+  }
+
   /** Bind a texture to a sampler uniform on `unit`. */
   private bindTex(
     gl: WebGL2RenderingContext,
@@ -989,12 +1180,13 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
       this.blurProg,
       this.compositeProg,
       this.planetProg,
+      this.overlayProg,
     ]) {
       if (p) {
         gl.deleteProgram(p);
       }
     }
-    for (const v of [this.vao, this.postVao, this.planetVao]) {
+    for (const v of [this.vao, this.postVao, this.planetVao, this.overlayVao]) {
       if (v) {
         gl.deleteVertexArray(v);
       }
@@ -1004,6 +1196,8 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
       this.instanceBuf,
       this.planetQuadBuf,
       this.planetInstanceBuf,
+      this.overlayQuadBuf,
+      this.overlayInstanceBuf,
     ]) {
       if (b) {
         gl.deleteBuffer(b);
@@ -1015,19 +1209,25 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     this.blurProg = null;
     this.compositeProg = null;
     this.planetProg = null;
+    this.overlayProg = null;
     this.vao = null;
     this.postVao = null;
     this.planetVao = null;
+    this.overlayVao = null;
     this.quadBuf = null;
     this.instanceBuf = null;
     this.planetQuadBuf = null;
     this.planetInstanceBuf = null;
+    this.overlayQuadBuf = null;
+    this.overlayInstanceBuf = null;
     this.postOk = false;
     this.gl = null;
     this.data = new Float32Array(0);
     this.capacity = 0;
     this.planetData = new Float32Array(0);
     this.planetCapacity = 0;
+    this.overlayData = new Float32Array(0);
+    this.overlayCapacity = 0;
   }
 
   private ensureCapacity(instances: number): void {
@@ -1053,6 +1253,18 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     }
     this.planetCapacity = cap;
     this.planetData = new Float32Array(cap * FLOATS_PER_PLANET);
+  }
+
+  private ensureOverlayCapacity(instances: number): void {
+    if (instances <= this.overlayCapacity) {
+      return;
+    }
+    let cap = Math.max(this.overlayCapacity, 256);
+    while (cap < instances) {
+      cap *= 2;
+    }
+    this.overlayCapacity = cap;
+    this.overlayData = new Float32Array(cap * FLOATS_PER_OVERLAY);
   }
 }
 

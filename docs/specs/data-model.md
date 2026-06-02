@@ -58,5 +58,30 @@ faction-*activated* trade/military layer (game-design 01 §3 "established routes
 - Precomputed/cached tile payloads keyed by (seed, level, x, y, schemaVersion).
 - Immutable for scenery; regenerable from seed at any time (cache is an optimisation, not a source of truth).
 
+## Transactional tick commit + resume (E5-03)
+
+A resolved tick is persisted as **one atomic unit** — the post-resolution active-set state
+*and* that tick's appended `event_log` rows commit or roll back together (architecture 03 §6:
+"a tick either fully commits or rolls back; the event log is append-only and ordered by
+tick"). The persistence module owns the boundary:
+
+- `TickCommitService.commitTick(gameId, resolvedState, events)` (`@Transactional`) composes
+  `GameStateRepository.save` (the active-set upsert + delete-then-insert diff, so E5-02
+  promotion inserts and demotion deletes participate in the same transaction) with
+  `EventLogRepository.appendTick` (events written in resolver-emission order, `seq = 0..n-1`)
+  inside a single Spring transaction. Any failure mid-commit rolls back the whole tick: no
+  state rows for a tick whose events did not land, and no orphan `event_log` rows for a tick
+  whose state did not land.
+- It is keyed by **engine types** (`GameState` + `List<PublicEvent>`), not the orchestrator's
+  `TickResult` (which merely bundles those two), so persistence has no orchestrator dependency
+  (no module cycle) and the engine stays pure (it never sees Spring or a transaction). The
+  orchestrator/api layer unwraps its `TickResult` and calls `commitTick`.
+- **Resume:** `TickCommitService.resume(gameId)` reconstructs the engine `GameState` at the
+  last committed tick from the active set (`GameStateRepository.load`). Because the snapshot
+  is persisted post-resolution and carries its own `tick`, the reloaded state *is* the last
+  committed tick; the orchestrator advances it to `tick + 1` and resolves on, reproducing the
+  next tick identically (golden-hash verified). The `event_log` is the append-only public
+  record consumed for replay/feed, not the source of the authoritative resume state.
+
 ## Determinism note
 The DB holds only the *divergence* from the procedural baseline (active systems + game state). Seed + DB + event_log fully reconstruct any tick.

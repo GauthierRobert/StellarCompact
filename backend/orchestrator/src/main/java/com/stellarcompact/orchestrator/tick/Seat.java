@@ -84,7 +84,8 @@ public sealed interface Seat permits Seat.ScriptedSeat, Seat.LlmSeat {
         @Override
         public SeatDecision decide(TickContext ctx) {
             FactionId actor = sovereign.factionId();
-            WorldView view = WorldViewBuilder.build(ctx.state(), ctx.adjacency(), actor);
+            WorldView view = WorldViewBuilder.build(
+                    ctx.state(), ctx.adjacency(), actor, ctx.inbox().forRecipient(actor));
             AgentResponse response = sovereign.decide(view);
 
             List<Action> valid = new ArrayList<>();
@@ -146,7 +147,8 @@ public sealed interface Seat permits Seat.ScriptedSeat, Seat.LlmSeat {
 
         @Override
         public SeatDecision decide(TickContext ctx) {
-            WorldView view = WorldViewBuilder.build(ctx.state(), ctx.adjacency(), factionId);
+            WorldView view = WorldViewBuilder.build(
+                    ctx.state(), ctx.adjacency(), factionId, ctx.inbox().forRecipient(factionId));
             AssembledPrompt prompt = promptAssembler.assemble(config, view);
             ValidationContext vctx = new ValidationContext(
                     ctx.state(), factionId, ctx.profile(), ctx.network());

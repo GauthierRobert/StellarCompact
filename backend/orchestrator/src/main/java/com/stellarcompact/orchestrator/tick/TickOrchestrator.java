@@ -6,6 +6,7 @@ import com.stellarcompact.engine.resolve.ResolveResult;
 import com.stellarcompact.engine.resolve.Resolver;
 import com.stellarcompact.engine.resolve.SubmittedAction;
 import com.stellarcompact.engine.state.FactionId;
+import com.stellarcompact.orchestrator.sovereign.Inbox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -114,25 +115,30 @@ public class TickOrchestrator {
 
         long tick = ctx.state().tick();
 
-        // --- Negotiation phase (rounds from config; E4-06 routes the messages) ---------
-        List<AgentResponse.Message> messages = new ArrayList<>();
-        for (int round = 0; round < properties.negotiationRounds(); round++) {
-            Map<FactionId, SeatDecision> negotiated =
-                    fanOut(ordered, ctx, properties.negotiationTimeout(), "negotiation#" + round);
-            // Negotiation gathers messages only; structured proposals + delivery into the
-            // next WorldView are E4-06. Actions emitted in the negotiation phase are not
-            // resolved here (the action phase is the authoritative source of the batch).
-            for (Seat seat : ordered) {
-                SeatDecision d = negotiated.get(seat.factionId());
-                if (d != null) {
-                    messages.addAll(d.messages());
-                }
-            }
-        }
+        // --- Negotiation phase (E4-06): configurable rounds; deliver messages + offers. --
+        //
+        // Each round fans out across seats under the negotiation deadline (one virtual
+        // thread per seat, stragglers Hold - the same machinery as the action phase). The
+        // inbox threads the conversation forward: round r is handed the inbox accumulated
+        // through round r-1 (seeded with whatever the prior tick carried into ctx), so a
+        // message A sends in round 1 is visible in B's round-2 WorldView. After each round
+        // every seat's free-text messages are routed to their addressees and folded into
+        // the inbox for the next round. Pending trade/treaty PROPOSALS need no routing
+        // here: a Propose* action resolves in the Action phase into engine state (a
+        // directed MarketOrder / proposed Treaty with an addressee + expiry) that persists
+        // across ticks in GameState until accepted/declined/expired, and the
+        // WorldViewBuilder already surfaces it. Negotiation therefore mutates NO state
+        // beyond queuing transient messages for delivery; nothing binds until a validated
+        // Accept resolves in the engine.
+        NegotiationOutcome negotiation = runNegotiation(ordered, ctx, tick);
 
         // --- Action phase: fan out under the action deadline, gather validated decisions.
+        // It sees the same delivered inbox the negotiation rounds produced, so a proposal
+        // an agent decides to act on in response to a message is shaped against a view
+        // that already shows that message.
+        TickContext actionCtx = ctx.withInbox(negotiation.deliveredInbox());
         Map<FactionId, SeatDecision> decisions =
-                fanOut(ordered, ctx, properties.actionTimeout(), "action");
+                fanOut(ordered, actionCtx, properties.actionTimeout(), "action");
 
         // --- Reassemble a DETERMINISTIC submitted batch (seat order + submission order).
         List<SubmittedAction> batch = new ArrayList<>();
@@ -150,7 +156,61 @@ public class TickOrchestrator {
         ResolveResult result = Resolver.resolveResult(
                 ctx.state(), batch, ctx.profile(), gameSeed, ctx.network());
 
-        return new TickResult(tick, result.state(), batch, result.events(), messages);
+        return new TickResult(tick, result.state(), batch, result.events(), negotiation.messages());
+    }
+
+    /**
+     * Run the negotiation phase: {@link TickProperties#negotiationRounds()} rounds (0
+     * skips negotiation entirely), each a fan-out under the negotiation deadline. Returns
+     * both the flat list of every free-text message gathered this tick (for
+     * {@link TickResult#messages()}, which the loop threads into the next tick's
+     * {@link TickContext#inbox()}) and the fully-accumulated {@link Inbox} delivered into
+     * the final round (which the Action phase reuses).
+     *
+     * <p><b>Seeding from the carried-in inbox.</b> Round 0 is handed {@code ctx.inbox()} -
+     * the messages the loop delivered from the previous tick - so a conversation spans
+     * ticks naturally (diplomacy 04 section 1). Messages sent <em>this</em> tick are
+     * routed on top, so the deliveredInbox a recipient sees combines last tick's and this
+     * tick's traffic; the {@code messages} returned for the loop are only this tick's new
+     * traffic (the previous tick's were already delivered), avoiding redelivery.
+     *
+     * <p><b>Effect-free.</b> This method never touches {@code GameState} and never adds to
+     * the submitted batch; its only outputs are message routing into a transient inbox.
+     */
+    private NegotiationOutcome runNegotiation(List<Seat> ordered, TickContext ctx, long tick) {
+        Inbox carriedIn = ctx.inbox();          // delivered from the previous tick
+        Inbox delivered = carriedIn;            // grows as rounds add this tick's messages
+        List<AgentResponse.Message> thisTickMessages = new ArrayList<>();
+
+        for (int round = 0; round < properties.negotiationRounds(); round++) {
+            // Each round perceives the inbox accumulated so far (prior tick + earlier
+            // rounds). Stragglers Hold; a held seat simply contributes no messages.
+            Map<FactionId, SeatDecision> negotiated = fanOut(
+                    ordered, ctx.withInbox(delivered),
+                    properties.negotiationTimeout(), "negotiation#" + round);
+
+            // Route this round's free-text messages to their addressees, folding them into
+            // the inbox the NEXT round (and the action phase) will perceive.
+            for (Seat seat : ordered) {
+                SeatDecision d = negotiated.get(seat.factionId());
+                if (d == null || d.messages().isEmpty()) {
+                    continue;
+                }
+                delivered = Inbox.route(delivered, seat.factionId(), d.messages(), tick);
+                thisTickMessages.addAll(d.messages());
+            }
+        }
+        return new NegotiationOutcome(thisTickMessages, delivered);
+    }
+
+    /**
+     * The negotiation phase's two outputs: {@code messages} is this tick's newly-gathered
+     * free text (for the next tick's inbox), {@code deliveredInbox} is the fully
+     * accumulated routed inbox the action phase reuses.
+     */
+    private record NegotiationOutcome(
+            List<AgentResponse.Message> messages,
+            Inbox deliveredInbox) {
     }
 
     /**

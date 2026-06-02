@@ -154,6 +154,27 @@ public final class BalanceProfileLoader {
         require(tick.intervalMs() > 0, "tick.intervalMs must be > 0");
         require(tick.negotiationRounds() > 0, "tick.negotiationRounds must be > 0");
         require(tick.phaseTimeoutMs() > 0, "tick.phaseTimeoutMs must be > 0");
+
+        // espionage (E1-13). Additive: a profile may omit the block entirely (the
+        // record supplies inert defaults), but any odds that ARE supplied must be
+        // probabilities and the effect magnitudes non-negative.
+        BalanceProfile.Espionage esp = req(p.espionage(), "espionage");
+        esp.successBase().forEach((k, val) ->
+                require(prob(val), "espionage.successBase." + k + " must be in [0,1]"));
+        esp.detectionBase().forEach((k, val) ->
+                require(prob(val), "espionage.detectionBase." + k + " must be in [0,1]"));
+        require(esp.counterIntelSuccessPenalty() >= 0.0,
+                "espionage.counterIntelSuccessPenalty must be >= 0");
+        require(esp.counterIntelDetectionBonus() >= 0.0,
+                "espionage.counterIntelDetectionBonus must be >= 0");
+        require(prob(esp.stealResourceFraction()),
+                "espionage.stealResourceFraction must be in [0,1]");
+        require(esp.unrestPopulationLoss() >= 0, "espionage.unrestPopulationLoss must be >= 0");
+        require(prob(esp.unrestLoyaltyLoss()), "espionage.unrestLoyaltyLoss must be in [0,1]");
+    }
+
+    private static boolean prob(double x) {
+        return x >= 0.0 && x <= 1.0;
     }
 
     private static boolean pct(double x) {

@@ -104,6 +104,7 @@
       "targetingSystems": 110.0,
       "shielding": 110.0,
       "diplomaticCorps": 80.0,
+      "intelligenceAgency": 110.0,
       "monumentalWorks": 200.0
     },
     "times": {
@@ -118,6 +119,7 @@
       "targetingSystems": 18,
       "shielding": 18,
       "diplomaticCorps": 15,
+      "intelligenceAgency": 18,
       "monumentalWorks": 30
     },
     "multipliers": {
@@ -141,6 +143,7 @@
       "targetingSystems": ["corvetteDoctrine"],
       "shielding": ["corvetteDoctrine"],
       "diplomaticCorps": [],
+      "intelligenceAgency": ["diplomaticCorps"],
       "monumentalWorks": ["marketNetworks"]
     },
     "unlocks": {
@@ -187,5 +190,31 @@
     "intervalMs": 120000,
     "negotiationRounds": 3,
     "phaseTimeoutMs": 30000
+  },
+  "espionage": {
+    "successBase": {
+      "scout": 0.7,
+      "stealIntel": 0.4,
+      "sabotage": 0.35,
+      "inciteUnrest": 0.45
+    },
+    "detectionBase": {
+      "scout": 0.12,
+      "stealIntel": 0.4,
+      "sabotage": 0.5,
+      "inciteUnrest": 0.45
+    },
+    "cost": {
+      "scout":        { "energy": 0.0, "minerals": 0.0, "food": 0.0, "tech": 8.0,  "influence": 15.0 },
+      "stealIntel":   { "energy": 0.0, "minerals": 0.0, "food": 0.0, "tech": 25.0, "influence": 40.0 },
+      "sabotage":     { "energy": 0.0, "minerals": 0.0, "food": 0.0, "tech": 15.0, "influence": 30.0 },
+      "inciteUnrest": { "energy": 0.0, "minerals": 0.0, "food": 0.0, "tech": 8.0,  "influence": 50.0 }
+    },
+    "counterIntelTech": "intelligenceAgency",
+    "counterIntelSuccessPenalty": 0.3,
+    "counterIntelDetectionBonus": 0.25,
+    "stealResourceFraction": 0.15,
+    "unrestPopulationLoss": 3,
+    "unrestLoyaltyLoss": 0.25
   }
 }

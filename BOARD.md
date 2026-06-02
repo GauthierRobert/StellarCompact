@@ -360,7 +360,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** a slow agent never stalls the tick; per-phase timeout enforced; resolution stays deterministic; load test with N slow agents.
 
 ### E4-06 · Negotiation phase
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E4-05 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E4-05 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/game-design/04-diplomacy.md` §1, `docs/architecture/03-agent-runtime.md` §1
 - **Do:** Run 1–2 configurable negotiation rounds: collect `SendMessage` (free text, no mechanical effect) + structured
   `Propose*`; deliver messages/offers into the next WorldView; nothing binds until accepted.
@@ -396,7 +396,7 @@ client/agent-visible read (flagged 🔒 below).
 # E6 — API: REST + STOMP  *(Phase 2)* — read `.claude/skills/realtime-websocket`
 
 ### E6-01 · Match lifecycle REST
-- **Status:** ☐ Todo · **Module:** api · **Depends on:** E1-15, E5-03 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** api · **Depends on:** E1-15, E5-03 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/specs/rest-api.md` §Match lifecycle
 - **Do:** `POST /api/games`, `GET /api/games/{id}`, `start/pause/resume`, `GET …/state` (fog-applied per requester),
   `GET …/events?fromTick=`, `GET …/leaderboard`.
@@ -495,7 +495,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** server and client agree star-for-star for sampled cells; generation cost is O(visible), not O(catalog).
 
 ### E8-04 · Quadtree/Hilbert tile service + payloads
-- **Status:** ☐ Todo · **Module:** galaxy/api · **Depends on:** E8-03, E6-03 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** galaxy/api · **Depends on:** E8-03, E6-03 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `.claude/skills/lod-tiling`, `docs/architecture/02-galaxy-scale.md` §3,§5
 - **Do:** Full quadtree LOD: coarse levels → `AggregateTile` (density image/impostors); fine levels → `StarListTile`
   (actual stars + active-system pointers). Hilbert ordering for cache locality; generate-on-miss + cache.

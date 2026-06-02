@@ -459,7 +459,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** HUD reflects live state via signals; panels update on selection; no direct state mutation from UI.
 
 ### E7-05 · Sovereign config screens
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E6-02 · **Delegate to:** frontend-developer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E6-02 · **Delegate to:** frontend-developer
 - **Read first:** `docs/specs/rest-api.md` §Sovereign configuration, `docs/game-design/04-diplomacy.md` §6
 - **Do:** Create/edit a Sovereign: persona preset or custom, goals, hard constraints, model tier. Calls the faction config REST.
 - **Done when:** a human can configure & attach a Sovereign to a game; validation matches the REST contract.
@@ -511,7 +511,8 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** panning/zooming a billion-star galaxy stays fluid; constant data-in-flight; no visible popping at LOD changes.
 
 ### E8-06 · Active overlay layer composited on tiles
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E8-05, E6-04 · **Delegate to:** galaxy-renderer-engineer · 🔒
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E8-05, E6-04 · **Delegate to:** galaxy-renderer-engineer · 🔒
+- **Security sign-off:** PENDING (X-01) — overlay marks/routes derived strictly from `OverlayStore` (fed only by the server-authoritative fog-filtered STOMP stream + REST resync); no client-side inference of ownership/fleets/hidden state; unclaimed → null tint, undisclosed systems → no mark. Trust boundary is the store contents (STOMP→store path owned by E6-04/E7-03).
 - **Read first:** `docs/architecture/02-galaxy-scale.md` §3,§5, `docs/specs/websocket-protocol.md`
 - **Do:** Composite the **thin dynamic overlay** (ownership tint, fleet markers, live routes) — fetched/streamed
   separately — on top of cacheable star tiles, joined client-side by system id.
@@ -529,7 +530,7 @@ client/agent-visible read (flagged 🔒 below).
 # E9 — Progression & spectacle  *(Phase 4)*
 
 ### E9-01 · Small→large progression + reputation carry-over
-- **Status:** ☐ Todo · **Module:** all · **Depends on:** E1-15, E6-01 · **Delegate to:** game-balance-designer
+- **Status:** ✅ Done · **Module:** all · **Depends on:** E1-15, E6-01 · **Delegate to:** game-balance-designer
 - **Read first:** `docs/game-design/07-victory-and-lifecycle.md` §6, `docs/game-design/06-technology.md` §5
 - **Do:** Earn standing/a seat from small galaxies; enter large persistent galaxies carrying **only identity/reputation**
   (never material advantage). Tick interval scales with size.

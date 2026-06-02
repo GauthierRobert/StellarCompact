@@ -11,6 +11,7 @@ Cross-harness entry point (Codex, Cursor, OpenCode, Gemini, etc.). The canonical
 
 ## Where things are
 
+- **Implementation board (start here to build): `BOARD.md`** — ordered cards with deps, the skill/spec to read first, the subagent to delegate to, and a Definition of Done. `BOARD-INDEX.md` is the quick-scan card list.
 - Game rules: `docs/game-design/`
 - Architecture (incl. scaling): `docs/architecture/`
 - Specs, schemas, API contracts: `docs/specs/`

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.stellarcompact</groupId>
+        <artifactId>stellar-compact-backend</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>orchestrator</artifactId>
+    <name>Stellar Compact :: orchestrator</name>
+    <description>Tick scheduler with virtual threads + structured concurrency. Depends on engine + galaxy + agent-runtime.</description>
+
+    <properties>
+        <!--
+          Opt in to the Java 25 preview feature set. This is the only module
+          that uses java.util.concurrent.StructuredTaskScope (a preview API),
+          so it is the only module that turns on the parent's preview wiring
+          for both the compiler and the surefire/failsafe JVM. Keeping preview
+          off everywhere else avoids preview-flagged bytecode in the pure libs,
+          which would otherwise be skipped by class-file readers such as
+          ArchUnit.
+        -->
+        <preview.compiler.arg>--enable-preview</preview.compiler.arg>
+        <preview.surefire.arg>--enable-preview</preview.surefire.arg>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.stellarcompact</groupId>
+            <artifactId>engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.stellarcompact</groupId>
+            <artifactId>galaxy</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.stellarcompact</groupId>
+            <artifactId>agent-runtime</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

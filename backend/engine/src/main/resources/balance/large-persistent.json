@@ -1,0 +1,159 @@
+{
+  "name": "large-persistent",
+  "version": 1,
+  "resources": {
+    "biomeYields": {
+      "oceanic":  { "energy": 0.0, "minerals": 0.0, "food": 8.0, "tech": 0.0, "influence": 0.0 },
+      "terran":   { "energy": 1.0, "minerals": 1.0, "food": 5.0, "tech": 0.0, "influence": 0.0 },
+      "arid":     { "energy": 1.0, "minerals": 5.0, "food": 1.0, "tech": 0.0, "influence": 0.0 },
+      "volcanic": { "energy": 4.0, "minerals": 6.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "desert":   { "energy": 6.0, "minerals": 1.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "gas":      { "energy": 8.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "frozen":   { "energy": 0.0, "minerals": 1.0, "food": 0.0, "tech": 5.0, "influence": 0.0 },
+      "toxic":    { "energy": 1.0, "minerals": 2.0, "food": 0.0, "tech": 2.0, "influence": 0.0 }
+    },
+    "upkeep": {
+      "mine":            { "energy": 1.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "solarArray":      { "energy": 0.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "farm":            { "energy": 1.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "researchLab":     { "energy": 3.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "marketHub":       { "energy": 3.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "shipyard":        { "energy": 3.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "defensePlatform": { "energy": 3.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "monument":        { "energy": 2.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "terraformer":     { "energy": 4.0, "minerals": 0.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
+      "scout":           { "energy": 1.0, "minerals": 0.0, "food": 1.0, "tech": 0.0, "influence": 0.0 },
+      "corvette":        { "energy": 1.0, "minerals": 0.0, "food": 1.0, "tech": 0.0, "influence": 0.0 },
+      "cruiser":         { "energy": 2.0, "minerals": 0.0, "food": 2.0, "tech": 0.0, "influence": 0.0 },
+      "capital":         { "energy": 6.0, "minerals": 0.0, "food": 5.0, "tech": 0.0, "influence": 0.0 },
+      "freighter":       { "energy": 1.0, "minerals": 0.0, "food": 1.0, "tech": 0.0, "influence": 0.0 }
+    },
+    "deficitAttritionRate": 0.07
+  },
+  "population": {
+    "growthPerFoodSurplus": 0.15,
+    "capByBuilding": {
+      "farm": 4,
+      "marketHub": 2,
+      "monument": 3,
+      "researchLab": 2
+    }
+  },
+  "market": {
+    "matchPolicy": "priceTimePriority",
+    "routeInfluencePerVolume": 0.75
+  },
+  "construction": {
+    "buildTimes": {
+      "mine": 8,
+      "solarArray": 8,
+      "farm": 8,
+      "researchLab": 10,
+      "marketHub": 12,
+      "shipyard": 12,
+      "defensePlatform": 10,
+      "monument": 30,
+      "terraformerStep": 18
+    },
+    "costs": {
+      "mine":            { "energy": 0.0, "minerals": 40.0,  "food": 0.0, "tech": 0.0,  "influence": 0.0 },
+      "solarArray":      { "energy": 0.0, "minerals": 40.0,  "food": 0.0, "tech": 0.0,  "influence": 0.0 },
+      "farm":            { "energy": 0.0, "minerals": 35.0,  "food": 0.0, "tech": 0.0,  "influence": 0.0 },
+      "researchLab":     { "energy": 0.0, "minerals": 70.0,  "food": 0.0, "tech": 15.0, "influence": 0.0 },
+      "marketHub":       { "energy": 0.0, "minerals": 90.0,  "food": 0.0, "tech": 15.0, "influence": 0.0 },
+      "shipyard":        { "energy": 0.0, "minerals": 100.0, "food": 0.0, "tech": 25.0, "influence": 0.0 },
+      "defensePlatform": { "energy": 0.0, "minerals": 90.0,  "food": 0.0, "tech": 15.0, "influence": 0.0 },
+      "monument":        { "energy": 0.0, "minerals": 250.0, "food": 0.0, "tech": 80.0, "influence": 0.0 },
+      "terraformer":     { "energy": 0.0, "minerals": 120.0, "food": 0.0, "tech": 50.0, "influence": 0.0 }
+    }
+  },
+  "combat": {
+    "tierMultipliers": {
+      "scout": 0.5,
+      "corvette": 1.0,
+      "cruiser": 2.5,
+      "capital": 6.0,
+      "freighter": 0.0
+    },
+    "varianceBand": [0.35, 0.65],
+    "defensePlatformBonus": 1.6,
+    "occupationLoyaltyPenalty": 0.6,
+    "warExhaustionPerLoss": 1.0
+  },
+  "tech": {
+    "costs": {
+      "improvedExtraction": 60.0,
+      "hydroponics": 60.0,
+      "marketNetworks": 80.0,
+      "colonialLogistics": 80.0,
+      "terraformingI": 100.0,
+      "corvetteDoctrine": 60.0,
+      "cruiserDoctrine": 120.0,
+      "capitalDoctrine": 240.0,
+      "targetingSystems": 110.0,
+      "shielding": 110.0,
+      "diplomaticCorps": 80.0,
+      "monumentalWorks": 200.0
+    },
+    "times": {
+      "improvedExtraction": 12,
+      "hydroponics": 12,
+      "marketNetworks": 15,
+      "colonialLogistics": 15,
+      "terraformingI": 20,
+      "corvetteDoctrine": 12,
+      "cruiserDoctrine": 20,
+      "capitalDoctrine": 36,
+      "targetingSystems": 18,
+      "shielding": 18,
+      "diplomaticCorps": 15,
+      "monumentalWorks": 30
+    },
+    "multipliers": {
+      "improvedExtraction": 1.25,
+      "hydroponics": 1.25,
+      "marketNetworks": 1.5,
+      "colonialLogistics": 0.8,
+      "targetingSystems": 1.2,
+      "shielding": 1.2,
+      "diplomaticCorps": 1.25
+    }
+  },
+  "diplomacy": {
+    "reputation": {
+      "gainHonourTreaty": 5.0,
+      "penaltyBreakTreaty": 0.5,
+      "penaltyUnprovokedWar": 20.0,
+      "espionageDetectedPenalty": 10.0
+    },
+    "treatyEnforcement": {
+      "ceasefire": 1.0,
+      "nonAggression": 1.5,
+      "tradePact": 1.0,
+      "defensivePact": 2.0,
+      "alliance": 3.0,
+      "vassalage": 2.5
+    }
+  },
+  "victory": {
+    "domination": { "systemPct": 0.65 },
+    "economic": { "influenceTarget": 10000.0, "orTopForTicks": 200 },
+    "diplomatic": { "allianceMajorityPct": 0.65 },
+    "survival": { "tickLimit": 5000 },
+    "wonder": { "stages": 5, "holdTicks": 150 },
+    "scoreWeights": {
+      "systems": 3.0,
+      "influence": 2.0,
+      "economy": 1.5,
+      "tech": 1.0,
+      "reputation": 1.0,
+      "military": 1.5,
+      "centrality": 1.0
+    }
+  },
+  "tick": {
+    "intervalMs": 120000,
+    "negotiationRounds": 3,
+    "phaseTimeoutMs": 30000
+  }
+}

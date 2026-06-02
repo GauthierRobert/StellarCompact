@@ -1,0 +1,6 @@
+# Minimal placeholder config. Real datasource / Spring AI provider wiring lands
+# with later cards (persistence, agent-runtime). Provider neutrality: the model
+# provider is selected by profile/properties, never hardcoded in Java.
+spring:
+  application:
+    name: stellar-compact

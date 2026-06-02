@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.stellarcompact</groupId>
+    <artifactId>stellar-compact-backend</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Stellar Compact :: Backend (reactor)</name>
+    <description>Maven multi-module reactor for the Stellar Compact backend.</description>
+
+    <modules>
+        <module>engine</module>
+        <module>galaxy</module>
+        <module>agent-runtime</module>
+        <module>orchestrator</module>
+        <module>api</module>
+        <module>persistence</module>
+        <module>app</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+
+        <spring-boot.version>4.0.6</spring-boot.version>
+        <spring-ai.version>2.0.0-M8</spring-ai.version>
+
+        <junit.version>5.11.4</junit.version>
+        <archunit.version>1.4.2</archunit.version>
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
+
+        <!--
+          Structured concurrency (java.util.concurrent.StructuredTaskScope) is a
+          PREVIEW API in Java 25. The wiring to pass the enable-preview flag to
+          the compiler and to the surefire/failsafe JVM lives here at the parent
+          level (see pluginManagement below), but it is OPT-IN per module:
+          a module turns it on by overriding these two properties to the
+          enable-preview flag. It must stay OFF by default because:
+            (1) preview-flagged bytecode (minor version 0xFFFF) is rejected by
+                tooling that reads class files, e.g. ArchUnit's importer, which
+                silently yields zero classes and would void the purity tests;
+            (2) only the orchestrator actually uses the preview API.
+          Default empty value means the compiler/surefire receive a harmless
+          empty arg, so non-preview modules compile and test normally.
+        -->
+        <preview.compiler.arg></preview.compiler.arg>
+        <preview.surefire.arg></preview.surefire.arg>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.stellarcompact</groupId>
+                <artifactId>engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.stellarcompact</groupId>
+                <artifactId>galaxy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.stellarcompact</groupId>
+                <artifactId>agent-runtime</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.stellarcompact</groupId>
+                <artifactId>orchestrator</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.stellarcompact</groupId>
+                <artifactId>api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.stellarcompact</groupId>
+                <artifactId>persistence</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                        <!--
+                          Preview wiring: ${preview.compiler.arg} is empty by
+                          default; a module opts in by overriding it to
+                          "&#45;-enable-preview". compilerArgs is repeatable, so an
+                          empty value contributes nothing and javac never sees a
+                          blank flag.
+                        -->
+                        <compilerArgs combine.children="append">
+                            <arg>${preview.compiler.arg}</arg>
+                        </compilerArgs>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                    <configuration>
+                        <!--
+                          @{argLine} is the LATE-bound property JaCoCo's prepare-agent
+                          sets to the -javaagent flag; surefire expands it at runtime.
+                          Keeping it here (rather than relying on surefire's implicit
+                          pickup) guarantees the coverage agent still attaches even in
+                          modules that ALSO set ${preview.surefire.arg} to
+                          &#45;-enable-preview (e.g. orchestrator) — otherwise an explicit
+                          <argLine> would shadow JaCoCo's property and silently drop
+                          coverage. ${preview.surefire.arg} is empty by default; preview
+                          modules set the JVM flag.
+                        -->
+                        <argLine>@{argLine} ${preview.surefire.arg}</argLine>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe-plugin.version}</version>
+                    <configuration>
+                        <argLine>@{argLine} ${preview.surefire.arg}</argLine>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven-enforcer-plugin.version}</version>
+                </plugin>
+                <!--
+                  JaCoCo: code-coverage agent + report + coverage gate, configured
+                  ONCE here in the parent and inherited by every module. Modules do
+                  NOT redeclare it.
+
+                  prepare-agent  -> instruments the test JVM (works alongside the
+                                    orchestrator's &#45;-enable-preview argLine; the
+                                    agent is appended to argLine, not replacing it).
+                  report         -> writes the human-readable HTML/CSV/XML report to
+                                    each module's target/site/jacoco at "verify".
+                  check          -> the 80% line-coverage gate for engine +
+                                    agent-runtime.
+
+                  IMPORTANT (today): most modules are still near-empty placeholders,
+                  so a hard 80% halt would fail the build now. The rule is therefore
+                  ENFORCED AND VISIBLE but non-halting: it evaluates and prints a
+                  WARNING, the report is still generated, and the build stays GREEN.
+                  TODO: flip <haltOnFailure> to true once engine + agent-runtime have
+                  real code (post E1/E4).
+                -->
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco-maven-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>jacoco-prepare-agent</id>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>jacoco-report</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>jacoco-check-80</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                            <configuration>
+                                <!--
+                                  TODO: flip haltOnFailure to true once engine +
+                                  agent-runtime carry real code (post E1/E4). Until
+                                  then this prints a warning instead of failing the
+                                  build, so placeholder modules do not block CI.
+                                -->
+                                <haltOnFailure>false</haltOnFailure>
+                                <rules>
+                                    <rule>
+                                        <element>BUNDLE</element>
+                                        <limits>
+                                            <limit>
+                                                <counter>LINE</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>0.80</minimum>
+                                            </limit>
+                                        </limits>
+                                    </rule>
+                                </rules>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <!-- Inherited by every module; full config lives in pluginManagement above. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+    <repositories>
+        <repository>
+            <id>central</id>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central</id>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+        <pluginRepository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+</project>

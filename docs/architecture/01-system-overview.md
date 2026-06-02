@@ -36,7 +36,7 @@
    └────────────┘   └──────────────┘            └──────────────┘
 ```
 
-## 2. Modules (Maven/Gradle multi-module)
+## 2. Modules (Maven multi-module reactor)
 
 | Module | Responsibility | Spring? |
 |---|---|---|

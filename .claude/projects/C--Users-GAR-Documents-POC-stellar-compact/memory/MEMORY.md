@@ -1,0 +1,1 @@
+- [Backend JDK 25 build](backend-jdk25-build.md) — JDK 25 isn't the system default; set JAVA_HOME for every mvn run

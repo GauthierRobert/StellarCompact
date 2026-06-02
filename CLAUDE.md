@@ -24,6 +24,8 @@ Two things make this project unusual and must never be lost:
 ```
 stellar-compact/
 ├── CLAUDE.md                 ← you are here
+├── BOARD.md                  ← ordered, card-by-card implementation board (start here to build)
+├── BOARD-INDEX.md            ← one-line-per-card quick scan of BOARD.md
 ├── AGENTS.md                 ← cross-harness pointer (Codex/Cursor)
 ├── .claude/                  ← agent harness: skills, subagents, rules, commands
 │   ├── skills/               ← deep procedural knowledge (galaxy-rendering, lod-tiling, …)
@@ -60,6 +62,7 @@ When implementation begins, **read the relevant skill in `.claude/skills/` befor
 
 ## How to work here
 
+- **Start from the board.** `BOARD.md` (repo root) is the ordered, card-by-card implementation plan derived from these docs/specs/PoC. Pick the lowest-id `☐ Todo` card whose dependencies are `✅ Done`; `BOARD-INDEX.md` is the one-line-per-card quick scan.
 - Planning a feature → use the `planner` subagent / `/plan`.
 - Touching rendering → read `.claude/skills/galaxy-rendering` and `lod-tiling` first.
 - Touching the agent loop → read `.claude/skills/agent-sovereign` and `spring-ai-agent`.

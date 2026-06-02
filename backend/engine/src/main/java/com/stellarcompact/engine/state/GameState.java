@@ -3,7 +3,9 @@ package com.stellarcompact.engine.state;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The complete authoritative snapshot of a match at one tick - the single
@@ -39,7 +41,8 @@ public record GameState(
         Map<FleetId, Fleet> fleets,
         Map<TreatyId, Treaty> treaties,
         Map<RouteId, Route> routes,
-        Map<MarketOrderId, MarketOrder> marketOrders
+        Map<MarketOrderId, MarketOrder> marketOrders,
+        Set<WarState> wars
 ) {
     public GameState {
         if (status == null) {
@@ -60,18 +63,22 @@ public record GameState(
         treaties = Map.copyOf(treaties);
         routes = Map.copyOf(routes);
         marketOrders = Map.copyOf(marketOrders);
+        // The set of active wars (E1-09). Additive over the original six collections;
+        // a null is tolerated as "no wars" so an older positional caller / partial
+        // JSON degrades gracefully (forward-compatible, like the config DAG maps).
+        wars = wars == null ? Set.of() : Set.copyOf(wars);
     }
 
     /** @return a new snapshot identical to this one but at the given tick. */
     public GameState withTick(long newTick) {
         return new GameState(gameSeed, newTick, status, balanceProfileName, balanceProfileVersion,
-                factions, systems, fleets, treaties, routes, marketOrders);
+                factions, systems, fleets, treaties, routes, marketOrders, wars);
     }
 
     /** @return a new snapshot identical to this one but with the given lifecycle status. */
     public GameState withStatus(GameStatus newStatus) {
         return new GameState(gameSeed, tick, newStatus, balanceProfileName, balanceProfileVersion,
-                factions, systems, fleets, treaties, routes, marketOrders);
+                factions, systems, fleets, treaties, routes, marketOrders, wars);
     }
 
     /**
@@ -83,7 +90,7 @@ public record GameState(
         Map<FactionId, Faction> next = new LinkedHashMap<>(factions);
         next.put(faction.id(), faction);
         return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
-                next, systems, fleets, treaties, routes, marketOrders);
+                next, systems, fleets, treaties, routes, marketOrders, wars);
     }
 
     /** Copy-on-write: a new snapshot with {@code system} inserted/replaced by its id. */
@@ -91,7 +98,7 @@ public record GameState(
         Map<SystemId, ActiveSystem> next = new LinkedHashMap<>(systems);
         next.put(system.id(), system);
         return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
-                factions, next, fleets, treaties, routes, marketOrders);
+                factions, next, fleets, treaties, routes, marketOrders, wars);
     }
 
     /** Copy-on-write: a new snapshot with {@code fleet} inserted/replaced by its id. */
@@ -99,7 +106,7 @@ public record GameState(
         Map<FleetId, Fleet> next = new LinkedHashMap<>(fleets);
         next.put(fleet.id(), fleet);
         return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
-                factions, systems, next, treaties, routes, marketOrders);
+                factions, systems, next, treaties, routes, marketOrders, wars);
     }
 
     /**
@@ -110,6 +117,46 @@ public record GameState(
      */
     public GameState withMarketOrders(Map<MarketOrderId, MarketOrder> newOrders) {
         return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
-                factions, systems, fleets, treaties, routes, newOrders);
+                factions, systems, fleets, treaties, routes, newOrders, wars);
+    }
+
+    /**
+     * Copy-on-write: a new snapshot whose set of active wars is replaced by
+     * {@code newWars}. The DIPLOMATIC_STATE step (E1-09 {@code DeclareWar}) adds a
+     * {@link WarState} here; later cards (peace/ceasefire) remove them.
+     */
+    public GameState withWars(Set<WarState> newWars) {
+        return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
+                factions, systems, fleets, treaties, routes, marketOrders, newWars);
+    }
+
+    /**
+     * Copy-on-write convenience: this snapshot plus a war between {@code x} and
+     * {@code y} begun at {@code sinceTick}. Idempotent - re-declaring an existing
+     * war (same unordered pair) leaves the set unchanged (and keeps the original
+     * start tick), because {@link WarState} identity is the pair alone.
+     */
+    public GameState withWar(FactionId x, FactionId y, long sinceTick) {
+        WarState war = WarState.between(x, y, sinceTick);
+        if (wars.contains(war)) {
+            return this;
+        }
+        Set<WarState> next = new LinkedHashSet<>(wars);
+        next.add(war);
+        return withWars(next);
+    }
+
+    /**
+     * @return {@code true} iff a {@link WarState} currently exists between {@code x}
+     * and {@code y} (either orientation). The positive war-state gate the validator
+     * uses for kinetic actions (spec section 4a F1).
+     */
+    public boolean atWar(FactionId x, FactionId y) {
+        for (WarState war : wars) {
+            if (war.isBetween(x, y)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

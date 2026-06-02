@@ -74,7 +74,7 @@ class DevelopmentResolutionTest {
         Faction alpha = new Faction(ALPHA, "Alpha", 0.0, stock, tech);
         return new GameState(7L, 3L, GameStatus.RUNNING, "small-default", 1,
                 Map.of(ALPHA, alpha), Map.of(SYS, system),
-                Map.of(), Map.of(), Map.of(), Map.of());
+                Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
     }
 
     private static GameState resolve(GameState before, SubmittedAction... actions) {

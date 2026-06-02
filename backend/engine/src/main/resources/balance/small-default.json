@@ -91,6 +91,10 @@
     "occupationLoyaltyPenalty": 0.5,
     "warExhaustionPerLoss": 1.0
   },
+  "movement": {
+    "energyCostPerLaneTick": 0.5,
+    "interceptionEnabled": true
+  },
   "tech": {
     "costs": {
       "improvedExtraction": 40.0,

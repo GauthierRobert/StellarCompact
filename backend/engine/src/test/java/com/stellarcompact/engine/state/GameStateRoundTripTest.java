@@ -101,7 +101,8 @@ class GameStateRoundTripTest {
                 Map.of(parked.id(), parked, enroute.id(), enroute),
                 Map.of(treaty.id(), treaty),
                 Map.of(route.id(), route),
-                Map.of(order.id(), order));
+                Map.of(order.id(), order),
+                java.util.Set.of(new com.stellarcompact.engine.state.WarState(fA, fB, 3L)));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.stellarcompact.engine.resolve;
 import com.stellarcompact.engine.action.Action;
 import com.stellarcompact.engine.action.UnknownAction;
 import com.stellarcompact.engine.config.BalanceProfile;
+import com.stellarcompact.engine.map.LaneNetwork;
 import com.stellarcompact.engine.state.Faction;
 import com.stellarcompact.engine.state.FactionId;
 import com.stellarcompact.engine.state.GameState;
@@ -67,6 +68,24 @@ public final class Resolver {
      */
     public static GameState resolve(GameState state, List<SubmittedAction> validatedActions,
                                     BalanceProfile profile, long seed) {
+        // Legacy 4-arg entry point: no lane graph supplied. Movement/interception
+        // become inert (a fleet cannot move on an unproven path), every other step is
+        // unaffected. Existing callers/tests that pre-date E1-09 keep their behaviour.
+        return resolve(state, validatedActions, profile, seed, LaneNetwork.EMPTY);
+    }
+
+    /**
+     * Resolve one tick with an explicit {@link LaneNetwork} (E1-09). The network is
+     * the static-per-match lane graph the MOVEMENT step needs to compute travel ETAs,
+     * advance fleets and detect interception; it is passed alongside the profile
+     * rather than embedded in {@link GameState} (heavy static map kept out of the
+     * per-tick snapshot/hash). Pass {@link LaneNetwork#EMPTY} for a match with no lane
+     * graph (movement then no-ops).
+     *
+     * @param network the active-region lane graph (never {@code null}; use {@code EMPTY})
+     */
+    public static GameState resolve(GameState state, List<SubmittedAction> validatedActions,
+                                    BalanceProfile profile, long seed, LaneNetwork network) {
         if (state == null) {
             throw new IllegalArgumentException("resolve: state must be set");
         }
@@ -75,6 +94,9 @@ public final class Resolver {
         }
         if (profile == null) {
             throw new IllegalArgumentException("resolve: profile must be set");
+        }
+        if (network == null) {
+            throw new IllegalArgumentException("resolve: network must be set (use LaneNetwork.EMPTY)");
         }
 
         // 1. Impose the deterministic order. Drop actions that drive no step
@@ -91,7 +113,10 @@ public final class Resolver {
         // debit through this ledger (never debit a Faction directly); it is applied
         // once, atomically, after all steps - see settleSpends below.
         SpendLedger ledger = new SpendLedger();
-        StepContext ctx = new StepContext(profile, seed, state.tick(), ledger);
+        // Battles interception triggers in MOVEMENT, handed to COMBAT (E1-10). Mutable
+        // scratch local to this single-threaded resolve; never shared.
+        List<PendingBattle> pendingBattles = new ArrayList<>();
+        StepContext ctx = new StepContext(profile, seed, state.tick(), ledger, network, pendingBattles);
 
         // 2. Walk the eleven fixed resolution steps in declaration order. Each step
         //    consumes exactly the ordered slice of actions assigned to it.
@@ -127,8 +152,8 @@ public final class Resolver {
         return switch (step) {
             case DIPLOMATIC_STATE -> resolveActionDriven(state, slice, ctx);
             case ESPIONAGE -> resolveActionDriven(state, slice, ctx);
-            case MOVEMENT -> resolveActionDriven(state, slice, ctx);
-            case COMBAT -> resolveActionDriven(state, slice, ctx);
+            case MOVEMENT -> resolveMovement(state, slice, ctx);
+            case COMBAT -> resolveCombat(state, slice, ctx);
             case INTERDICTION -> resolveActionDriven(state, slice, ctx);
             case DEVELOPMENT -> resolveDevelopment(state, slice, ctx);
             case COLONISATION -> resolveActionDriven(state, slice, ctx);
@@ -152,6 +177,49 @@ public final class Resolver {
                                            StepContext ctx) {
         GameState afterActions = resolveActionDriven(state, slice, ctx);
         return MarketResolution.resolve(afterActions, ctx.profile(), ctx.ledger());
+    }
+
+    /**
+     * The MOVEMENT step (E1-09). First folds the {@code MoveFleet} action slice (the
+     * "launch" phase: a stationary fleet begins its validated lane path, escrowing the
+     * whole journey's Energy cost through the tick-wide ledger), then runs the passive
+     * per-tick advance sweep over every en-route fleet (decrement ETA, arrive / chain
+     * lanes / park, and detect mid-transit interception). Any battles interception
+     * triggers are accumulated into the context's {@link PendingBattle} list for the
+     * COMBAT step to resolve (E1-10). The launches precede the advance so a fleet that
+     * launches this tick also takes its first travel tick this tick (its ETA already
+     * reflects the lane length).
+     */
+    private static GameState resolveMovement(GameState state, List<SubmittedAction> slice,
+                                             StepContext ctx) {
+        GameState afterLaunch = state;
+        for (SubmittedAction sa : slice) {
+            if (sa.action() instanceof Action.MoveFleet move) {
+                afterLaunch = MovementResolution.launch(afterLaunch, sa.actor(), move,
+                        ctx.network(), ctx.profile(), ctx.ledger());
+            }
+        }
+        MovementResolution.AdvanceResult advanced =
+                MovementResolution.advance(afterLaunch, ctx.network(), ctx.profile());
+        ctx.pendingBattles().addAll(advanced.battles());
+        return advanced.state();
+    }
+
+    /**
+     * The COMBAT step (E1-10, seam wired by E1-09). Folds the {@code Attack} action
+     * slice (still stubbed until E1-10) and is the consumer of the
+     * {@link PendingBattle}s the MOVEMENT step's interception detection produced. The
+     * battles ride in {@code ctx.pendingBattles()}; resolving them - the power
+     * comparison, seeded variance band and proportional losses of game-design 05
+     * section 2 - is E1-10's job and is intentionally NOT done here. This card leaves
+     * the list populated and the seam documented so E1-10 plugs in without moving it;
+     * no fight is resolved on an unvalidated path.
+     */
+    private static GameState resolveCombat(GameState state, List<SubmittedAction> slice,
+                                           StepContext ctx) {
+        // TODO(E1-10): for each ctx.pendingBattles() resolve the engagement seeded from
+        // gameSeed XOR tick XOR battleId; apply proportional losses; capture on assault.
+        return resolveActionDriven(state, slice, ctx);
     }
 
     /**
@@ -280,16 +348,30 @@ public final class Resolver {
         return s; // TODO(E1-08): record the pending treaty for the counterparty.
     }
 
+    /**
+     * E1-09: declare war. Records a {@link com.stellarcompact.engine.state.WarState}
+     * between the actor and the target (idempotent - re-declaring an existing war is a
+     * no-op via {@code GameState.withWar}). This is the positive war-state the
+     * validator's kinetic gate (F1) and the MOVEMENT interception check require. The
+     * unprovoked-war reputation penalty (game-design 04) is deferred to the diplomacy
+     * card E1-12; this card lands only the state the kinetic/interception path needs.
+     */
     private static GameState stubDeclareWar(GameState s, FactionId a, Action.DeclareWar x, StepContext c) {
-        return s; // TODO(E1-09): set war state; apply unprovoked-war reputation cost.
+        return s.withWar(a, x.target(), c.tick());
     }
 
     private static GameState stubEspionage(GameState s, FactionId a, Action.Espionage x, StepContext c) {
         return s; // TODO(E1-12): seeded espionage roll; escrow Influence/Tech cost.
     }
 
+    /**
+     * E1-09: MoveFleet is handled by {@link #resolveMovement} (launch + advance with
+     * the lane network), not through this per-action stub, so this arm is unreachable
+     * for the MOVEMENT step. It remains only to keep the sealed-{@link Action} switch
+     * exhaustive (a new variant must still break compilation here).
+     */
     private static GameState stubMoveFleet(GameState s, FactionId a, Action.MoveFleet x, StepContext c) {
-        return s; // TODO(E1-09): advance along path; mid-transit interception.
+        return s;
     }
 
     private static GameState stubAttack(GameState s, FactionId a, Action.Attack x, StepContext c) {
@@ -390,13 +472,20 @@ public final class Resolver {
      * plus tick for deriving seeded RNG, and the tick-wide {@link SpendLedger} escrow
      * seam. One record keeps handler signatures stable as bodies land in later cards.
      */
-    record StepContext(BalanceProfile profile, long seed, long tick, SpendLedger ledger) {
+    record StepContext(BalanceProfile profile, long seed, long tick, SpendLedger ledger,
+                       LaneNetwork network, List<PendingBattle> pendingBattles) {
         StepContext {
             if (profile == null) {
                 throw new IllegalArgumentException("StepContext.profile must be set");
             }
             if (ledger == null) {
                 throw new IllegalArgumentException("StepContext.ledger must be set");
+            }
+            if (network == null) {
+                throw new IllegalArgumentException("StepContext.network must be set (use LaneNetwork.EMPTY)");
+            }
+            if (pendingBattles == null) {
+                throw new IllegalArgumentException("StepContext.pendingBattles must be set");
             }
         }
     }

@@ -36,11 +36,19 @@ public record BalanceProfile(
         Market market,
         Construction construction,
         Combat combat,
+        Movement movement,
         Tech tech,
         Diplomacy diplomacy,
         Victory victory,
         Tick tick
 ) {
+
+    public BalanceProfile {
+        // Movement is additive in E1-09; an older profile that omits it gets the
+        // inert defaults (free travel, interception off) so it stays loadable and
+        // deterministic (forward-compatible, like the tech DAG / terraform chain).
+        movement = movement == null ? Movement.defaults() : movement;
+    }
 
     /** Per-tick resource economy. */
     public record Resources(
@@ -166,6 +174,32 @@ public record BalanceProfile(
         public Combat {
             tierMultipliers = Map.copyOf(tierMultipliers);
             varianceBand = List.copyOf(varianceBand);
+        }
+    }
+
+    /**
+     * Fleet movement and lane-interception tunables (E1-09; game-design 05 section 4,
+     * 01 section 3). Map geometry (lane lengths in ticks) is NOT here - it is intrinsic
+     * to the lane graph ({@code engine.map.LaneNetwork}); this record holds only the
+     * gameplay <em>tunables</em> the resolver applies to that geometry.
+     *
+     * <ul>
+     *   <li>{@code energyCostPerLaneTick} - Energy charged per tick of lane travel,
+     *       summed over a fleet's journey and escrowed when the move is launched. A
+     *       value of {@code 0} makes travel free (the inert default).</li>
+     *   <li>{@code interceptionEnabled} - master switch for mid-transit interception.
+     *       When {@code true}, a hostile fleet holding a contested lane forces a battle
+     *       on a fleet traversing it (the trigger E1-09 detects; combat lands in
+     *       E1-10). When {@code false}, fleets pass freely (the inert default).</li>
+     * </ul>
+     */
+    public record Movement(
+            double energyCostPerLaneTick,
+            boolean interceptionEnabled
+    ) {
+        /** Inert defaults for a profile that omits the movement block: free, no interception. */
+        public static Movement defaults() {
+            return new Movement(0.0, false);
         }
     }
 

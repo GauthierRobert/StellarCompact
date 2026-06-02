@@ -55,8 +55,8 @@ class MarketResolutionTest {
         return new BalanceProfile(base.name(), base.version(), base.resources(),
                 base.population(),
                 new BalanceProfile.Market("priceTimePriority", 0.5, currency),
-                base.construction(), base.combat(), base.tech(), base.diplomacy(),
-                base.victory(), base.tick());
+                base.construction(), base.combat(), base.movement(), base.tech(),
+                base.diplomacy(), base.victory(), base.tick());
     }
 
     private static Faction faction(FactionId id, ResourceBundle stock) {
@@ -83,7 +83,8 @@ class MarketResolutionTest {
             book.put(o.id(), o);
         }
         return new GameState(7L, 5L, GameStatus.RUNNING, "small-default", 1,
-                factions, Map.of(HUB1, h1, HUB2, h2), Map.of(), Map.of(), Map.of(), book);
+                factions, Map.of(HUB1, h1, HUB2, h2), Map.of(), Map.of(), Map.of(), book,
+                java.util.Set.of());
     }
 
     private static GameState resolveMarket(GameState before) {

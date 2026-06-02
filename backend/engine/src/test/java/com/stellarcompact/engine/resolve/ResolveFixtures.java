@@ -44,7 +44,7 @@ final class ResolveFixtures {
                 42L, 5L, GameStatus.RUNNING, "small-default", 1,
                 Map.of(ALPHA, faction(ALPHA), BETA, faction(BETA), GAMMA, faction(GAMMA)),
                 Map.of(SYS_A, sysA),
-                Map.of(), Map.of(), Map.of(), Map.of());
+                Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
     }
 
     static BalanceProfile profile() {
@@ -58,6 +58,7 @@ final class ResolveFixtures {
                         Map.of("mine", new BalanceProfile.ResourceBundle(0, 50, 0, 0, 0)),
                         Map.of("toxic", "arid")),
                 new BalanceProfile.Combat(Map.of("scout", 1.0), List.of(0.8, 1.2), 0.2, 0.3, 0.1),
+                new BalanceProfile.Movement(0.5, true),
                 new BalanceProfile.Tech(Map.of("warpDrive", 100.0), Map.of("warpDrive", 5),
                         Map.of("warpDrive", 1.5), Map.of(), Map.of()),
                 new BalanceProfile.Diplomacy(

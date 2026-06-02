@@ -16,7 +16,9 @@ import static com.stellarcompact.engine.resolve.ResolveFixtures.ALPHA;
 import static com.stellarcompact.engine.resolve.ResolveFixtures.BETA;
 import static com.stellarcompact.engine.resolve.ResolveFixtures.GAMMA;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Resolver wiring + determinism tests. The per-step gameplay math is stubbed in
@@ -39,11 +41,31 @@ class ResolverTest {
     }
 
     @Test
-    void resolveRunsAllStepsAndStubsLeaveStateUnchanged() {
+    void resolveLeavesStateUnchangedForActionsWithoutStatefulHandlers() {
+        // A batch of only soft/no-op + still-stubbed handlers (Explore/Espionage are
+        // stubs in their respective cards) must leave the tick byte-identical. NOTE:
+        // DeclareWar is deliberately excluded here because E1-09 made it stateful (it
+        // records a WarState) - see declareWarRecordsWarState below.
+        List<SubmittedAction> inert = new ArrayList<>();
+        inert.add(new SubmittedAction(BETA, new Action.Explore(new SystemId("sysA")), 0));
+        inert.add(new SubmittedAction(GAMMA, new Action.Espionage(ALPHA, EspionageOperation.SCOUT), 0));
+        inert.add(new SubmittedAction(ALPHA, new Action.Hold(), 1));
+        inert.add(new SubmittedAction(BETA, new Action.SendMessage(ALPHA, "hi"), 1));
         GameState before = ResolveFixtures.baseState();
-        GameState after = Resolver.resolve(before, sampleBatch(), PROFILE, before.gameSeed());
-        // Every step is a documented no-op stub; the tick must be byte-identical.
+        GameState after = Resolver.resolve(before, inert, PROFILE, before.gameSeed());
         assertEquals(GoldenStateHash.sha256Hex(before), GoldenStateHash.sha256Hex(after));
+    }
+
+    @Test
+    void declareWarRecordsWarState() {
+        // E1-09: DeclareWar is now stateful - the DIPLOMATIC_STATE step records the war.
+        GameState before = ResolveFixtures.baseState();
+        List<SubmittedAction> batch = List.of(
+                new SubmittedAction(ALPHA, new Action.DeclareWar(BETA), 0));
+        GameState after = Resolver.resolve(before, batch, PROFILE, before.gameSeed());
+        assertFalse(before.atWar(ALPHA, BETA), "no war before");
+        assertTrue(after.atWar(ALPHA, BETA), "DeclareWar must record a positive war state");
+        assertTrue(after.atWar(BETA, ALPHA), "war is symmetric");
     }
 
     @Test

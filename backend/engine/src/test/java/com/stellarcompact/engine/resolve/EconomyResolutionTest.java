@@ -81,7 +81,7 @@ class EconomyResolutionTest {
                 : Map.of(FLEET, fleets.get(0));
         return new GameState(7L, 3L, GameStatus.RUNNING, "small-default", 1,
                 Map.of(ALPHA, alpha), Map.of(SYS, system), fleetMap,
-                Map.of(), Map.of(), Map.of());
+                Map.of(), Map.of(), Map.of(), java.util.Set.of());
     }
 
     private static GameState resolve(GameState before) {

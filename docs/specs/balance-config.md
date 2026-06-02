@@ -27,6 +27,10 @@ balanceProfile:
     defensePlatformBonus: ..
     occupationLoyaltyPenalty: ..
     warExhaustionPerLoss: ..
+  movement:                       # fleet travel + lane interception tunables (E1-09)
+    energyCostPerLaneTick: ..     # Energy charged per tick of lane travel; summed over the journey and escrowed at launch (0 = free)
+    interceptionEnabled: ..       # master switch: a hostile at-war fleet holding a contested-lane endpoint forces a mid-transit battle (E1-09 trigger; E1-10 resolves)
+                                  # NOTE: lane *lengths* (travel ticks) are map geometry, NOT here — they live on the lane graph (engine.map.LaneNetwork), derived from real distance at generation
   tech:
     costs: { ... }
     times: { ... }

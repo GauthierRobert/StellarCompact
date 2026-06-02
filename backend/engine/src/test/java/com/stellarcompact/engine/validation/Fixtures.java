@@ -130,6 +130,12 @@ final class Fixtures {
         return baseState(Map.of(), rich(), Map.of(), List.of());
     }
 
+    /** The base state but with an active war between {@code x} and {@code y} (E1-09 F1 tests). */
+    static GameState baseStateAtWar(FactionId x, FactionId y) {
+        return baseState(Map.of(), rich(), Map.of(), List.of())
+                .withWar(x, y, 1L);
+    }
+
     static GameState baseState(Map<TreatyId, Treaty> treaties,
                                ResourceBundle alphaStockpiles,
                                Map<TechId, TechProgress> alphaTech,
@@ -154,7 +160,8 @@ final class Fixtures {
                 Map.of(FLEET_A, fleetA, FLEET_B, fleetB),
                 treaties,
                 Map.of(ROUTE_B, routeB),
-                Map.of(OFFER_1, offer(OFFER_1, BETA)));
+                Map.of(OFFER_1, offer(OFFER_1, BETA)),
+                java.util.Set.of());
     }
 
     /**
@@ -178,6 +185,7 @@ final class Fixtures {
                         Map.of("mine", new BalanceProfile.ResourceBundle(0, 50, 0, 0, 0)),
                         Map.of("toxic", "arid")),
                 new BalanceProfile.Combat(Map.of("scout", 1.0), List.of(0.8, 1.2), 0.2, 0.3, 0.1),
+                new BalanceProfile.Movement(0.5, true),
                 new BalanceProfile.Tech(Map.of("warpDrive", 100.0), Map.of("warpDrive", 5),
                         Map.of("warpDrive", 1.5), Map.of(), Map.of()),
                 new BalanceProfile.Diplomacy(

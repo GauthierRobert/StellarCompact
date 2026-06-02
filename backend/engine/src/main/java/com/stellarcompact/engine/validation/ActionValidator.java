@@ -5,6 +5,7 @@ import com.stellarcompact.engine.action.AttackTarget;
 import com.stellarcompact.engine.action.BlockadeTarget;
 import com.stellarcompact.engine.action.UnknownAction;
 import com.stellarcompact.engine.config.BalanceProfile;
+import com.stellarcompact.engine.map.LaneNetwork;
 import com.stellarcompact.engine.state.ActiveSystem;
 import com.stellarcompact.engine.state.BuildingStatus;
 import com.stellarcompact.engine.state.BuildingType;
@@ -71,6 +72,23 @@ public final class ActionValidator {
      */
     public static ValidationResult validate(GameState state, FactionId actor, Action action,
                                             BalanceProfile profile) {
+        // Legacy 4-arg entry point: no lane graph supplied. Adjacency/reachability
+        // (F2) fall back to shape-only checks (pre-E1-09 behaviour); the war-state
+        // gate (F1) still applies (it needs only GameState, not the network).
+        return validate(state, actor, action, profile, LaneNetwork.EMPTY);
+    }
+
+    /**
+     * Validate with an explicit {@link LaneNetwork} (E1-09). The network lets the
+     * adjacency/reachability checks (spec section 4a, F2) become real lane checks for
+     * {@code Explore}, {@code Colonize} and {@code MoveFleet}; pass
+     * {@link LaneNetwork#EMPTY} (or use the 4-arg overload) when no lane graph is
+     * available, in which case those checks degrade to shape-only.
+     *
+     * @param network the active-region lane graph (never {@code null}; use {@code EMPTY})
+     */
+    public static ValidationResult validate(GameState state, FactionId actor, Action action,
+                                            BalanceProfile profile, LaneNetwork network) {
         if (state == null) {
             throw new IllegalArgumentException("validate: state must be set");
         }
@@ -83,6 +101,9 @@ public final class ActionValidator {
         if (profile == null) {
             throw new IllegalArgumentException("validate: profile must be set");
         }
+        if (network == null) {
+            throw new IllegalArgumentException("validate: network must be set (use LaneNetwork.EMPTY)");
+        }
 
         if (!state.factions().containsKey(actor)) {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
@@ -91,13 +112,13 @@ public final class ActionValidator {
 
         // Exhaustive dispatch - NO default. A new Action variant breaks compilation.
         return switch (action) {
-            case Action.Explore a -> validateExplore(state, actor, a);
-            case Action.Colonize a -> validateColonize(state, actor, a);
+            case Action.Explore a -> validateExplore(state, actor, a, network);
+            case Action.Colonize a -> validateColonize(state, actor, a, network);
             case Action.Build a -> validateBuild(state, actor, a, profile);
             case Action.Research a -> validateResearch(state, actor, a, profile);
             case Action.Terraform a -> validateTerraform(state, actor, a);
             case Action.BuildFleet a -> validateBuildFleet(state, actor, a, profile);
-            case Action.MoveFleet a -> validateMoveFleet(state, actor, a);
+            case Action.MoveFleet a -> validateMoveFleet(state, actor, a, network);
             case Action.EstablishRoute a -> validateEstablishRoute(state, actor, a);
             case Action.SendMessage a -> validateSendMessage(state, actor, a);
             case Action.ProposeTrade a -> validateProposeTrade(state, actor, a);
@@ -125,19 +146,25 @@ public final class ActionValidator {
     // ===== A. Environment actions =============================================
 
     private static ValidationResult validateExplore(GameState state, FactionId actor,
-                                                    Action.Explore a) {
+                                                    Action.Explore a, LaneNetwork network) {
         if (!state.systems().containsKey(a.targetSystem())) {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
                     "Cannot explore unknown system " + a.targetSystem().value() + ".");
         }
-        // TODO(E2-03/E1-09): NOT_ADJACENT needs the lane graph to prove the target
-        // is adjacent to a system the actor owns or has a fleet in. Not in GameState
-        // yet; the existence check above is all we can soundly enforce now.
+        // F2 (E1-09): NOT_ADJACENT - the target must be one lane hop from a system the
+        // actor owns or holds a fleet in. Enforced only when a lane network is supplied;
+        // with LaneNetwork.EMPTY this degrades to the existence check (pre-E1-09).
+        if (!network.isEmpty()
+                && !adjacentToActorPresence(state, actor, a.targetSystem(), network)) {
+            return ValidationResult.reject(RejectionReason.NOT_ADJACENT,
+                    "System " + a.targetSystem().value() + " is not one lane hop from any "
+                            + "system you own or have a fleet in.");
+        }
         return ValidationResult.valid();
     }
 
     private static ValidationResult validateColonize(GameState state, FactionId actor,
-                                                     Action.Colonize a) {
+                                                     Action.Colonize a, LaneNetwork network) {
         ActiveSystem host = systemOfPlanet(state, a.planet());
         if (host == null) {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
@@ -157,8 +184,21 @@ public final class ActionValidator {
                     "System " + host.id().value() + " belongs to another faction; "
                             + "you cannot colonise within it.");
         }
-        // TODO(E2-03/E1-07): planet reachability by the fleet (lane graph) and
-        // biome-scaled colonisation-cost affordability (per-action cost index).
+        // F2 (E1-09): the colony fleet must be positioned at the target system (the
+        // colony ship delivers the colony - game-design 03 Colonize). A stationary
+        // fleet whose location is the host system satisfies this; an en-route fleet, or
+        // one parked elsewhere, cannot colonise. Enforced only with a lane network
+        // available (it gates the same movement model); EMPTY degrades to shape-only.
+        if (!network.isEmpty()) {
+            if (fleet.enRoute() || fleet.location().isEmpty()
+                    || !fleet.location().get().equals(host.id())) {
+                return ValidationResult.reject(RejectionReason.NOT_ADJACENT,
+                        "Fleet " + a.viaFleet().value() + " must be stationed at "
+                                + host.id().value() + " to colonise planet "
+                                + a.planet().value() + ".");
+            }
+        }
+        // TODO(E1-07): biome-scaled colonisation-cost affordability (per-action cost index).
         return ValidationResult.valid();
     }
 
@@ -297,7 +337,7 @@ public final class ActionValidator {
     }
 
     private static ValidationResult validateMoveFleet(GameState state, FactionId actor,
-                                                      Action.MoveFleet a) {
+                                                      Action.MoveFleet a, LaneNetwork network) {
         Fleet fleet = state.fleets().get(a.fleet());
         if (fleet == null) {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
@@ -322,8 +362,25 @@ public final class ActionValidator {
                     "MoveFleet path does not end at the declared destination "
                             + a.destination().value() + ".");
         }
-        // TODO(E2-03/E1-09): prove every consecutive hop in path[] is a real lane
-        // and that the fleet location is the path origin. Needs the lane graph.
+        // F2 (E1-09): the path must start from the fleet's current location and every
+        // consecutive hop must be a real lane. Enforced only with a lane network
+        // available; with LaneNetwork.EMPTY only the shape checks above apply (pre-E1-09).
+        if (!network.isEmpty()) {
+            if (fleet.enRoute() || fleet.location().isEmpty()) {
+                return ValidationResult.reject(RejectionReason.NO_PATH,
+                        "Fleet " + a.fleet().value() + " is already in transit; it cannot "
+                                + "be redirected mid-lane this tick.");
+            }
+            SystemId origin = fleet.location().get();
+            // path[] is the ordered systems AFTER the origin (per MoveFleet.path);
+            // pathTicks proves origin->path[0]->...->destination is a real lane walk.
+            if (network.pathTicks(origin, path).isEmpty()) {
+                return ValidationResult.reject(RejectionReason.NO_PATH,
+                        "MoveFleet path from " + origin.value() + " to "
+                                + a.destination().value() + " is not a connected sequence "
+                                + "of lanes.");
+            }
+        }
         return ValidationResult.valid();
     }
 
@@ -595,10 +652,18 @@ public final class ActionValidator {
                                 + ") forbids attacking " + targetOwner.value()
                                 + "; break it first.");
             }
+            // F1 (E1-09): a kinetic strike on an OWNED target requires a positive war
+            // state. Absence of a forbidding treaty is necessary but NOT sufficient -
+            // peace-but-not-treaty is still peace. A neutral (unowned) target is exempt
+            // (targetOwner == null), so this gate is only reached for owned targets.
+            if (!state.atWar(actor, targetOwner)) {
+                return ValidationResult.reject(RejectionReason.NOT_AT_WAR,
+                        "You are not at war with " + targetOwner.value()
+                                + "; declare war before attacking its forces.");
+            }
         }
-        // TODO(E1-09): NOT_AT_WAR - against a non-neutral target a state of war is
-        // required. War is not a first-class state value yet; treaty-forbids gate
-        // enforced now, positive must-be-at-war deferred. Range needs lane graph.
+        // TODO(E1-10): fleet-positioned-at-target range gate (needs lane graph) lands
+        // with combat in E1-10.
         return ValidationResult.valid();
     }
 
@@ -644,9 +709,16 @@ public final class ActionValidator {
                         "Treaty " + t.id().value() + " (" + t.type()
                                 + ") forbids blockading " + targetOwner.value() + ".");
             }
+            // F1 (E1-09): blockading an owned route/system requires a positive war
+            // state (a neutral target is exempt - targetOwner == null).
+            if (!state.atWar(actor, targetOwner)) {
+                return ValidationResult.reject(RejectionReason.NOT_AT_WAR,
+                        "You are not at war with " + targetOwner.value()
+                                + "; declare war before blockading its assets.");
+            }
         }
-        // TODO(E1-09): NOT_AT_WAR / contested-status gate, and fleet positioning on
-        // the route/system (needs lane graph, E2-03).
+        // TODO(E1-11): fleet positioning on the route/system (needs lane graph) lands
+        // with blockade effects in E1-11.
         return ValidationResult.valid();
     }
 
@@ -677,8 +749,16 @@ public final class ActionValidator {
                     "Treaty " + t.id().value() + " (" + t.type()
                             + ") forbids raiding " + route.owner().value() + ".");
         }
-        // TODO(E1-09): NOT_AT_WAR / contested gate, and fleet positioning on the
-        // route (needs lane graph, E2-03).
+        // F1 (E1-09): a route always has an owner, so raiding always targets an owned
+        // asset and therefore always requires a positive war state - there is no
+        // neutral-target exemption for Raid.
+        if (!state.atWar(actor, route.owner())) {
+            return ValidationResult.reject(RejectionReason.NOT_AT_WAR,
+                    "You are not at war with " + route.owner().value()
+                            + "; declare war before raiding its route.");
+        }
+        // TODO(E1-11): fleet positioning on the route (needs lane graph) lands with
+        // raid effects in E1-11.
         return ValidationResult.valid();
     }
 
@@ -724,6 +804,31 @@ public final class ActionValidator {
 
     private static boolean isOwnedBy(ActiveSystem system, FactionId faction) {
         return system.owner().isPresent() && system.owner().get().equals(faction);
+    }
+
+    /**
+     * @return {@code true} iff {@code target} is one lane hop (per the {@code network})
+     * from at least one system the actor either owns or has a (stationary or en-route
+     * origin) fleet in - the "presence" Explore's NOT_ADJACENT gate (F2) checks. Pure:
+     * scans owned systems and own-fleet locations, both actor-knowable.
+     */
+    private static boolean adjacentToActorPresence(GameState state, FactionId actor,
+                                                   SystemId target, LaneNetwork network) {
+        for (ActiveSystem system : state.systems().values()) {
+            if (isOwnedBy(system, actor) && network.adjacent(system.id(), target)) {
+                return true;
+            }
+        }
+        for (Fleet fleet : state.fleets().values()) {
+            if (!actor.equals(fleet.owner())) {
+                continue;
+            }
+            if (fleet.location().isPresent()
+                    && network.adjacent(fleet.location().get(), target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

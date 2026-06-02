@@ -352,7 +352,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** exactly one re-prompt on failure; rejection reason fed back verbatim; post-retry failure ⇒ Hold; tested.
 
 ### E4-05 · Tick orchestrator (4 phases, structured concurrency, timeouts)
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E4-04, E1-05 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E4-04, E1-05 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/architecture/03-agent-runtime.md` §1, `.claude/skills/agent-sovereign`
 - **Do:** Real-time tick loop: Perception → Negotiation → Action → Resolution. Agent-calling phases fan out with **one
   virtual thread per Sovereign** under a **shared deadline** (`StructuredTaskScope`/`joinUntil`); stragglers contribute
@@ -481,7 +481,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** 10⁵–10⁶ visible stars at 60 fps; identical data contract to E7-02; canvas path retired or fallback.
 
 ### E8-02 · Astrophotography look (bloom, spikes, nebulosity)
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E8-01 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E8-01 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `.claude/skills/galaxy-rendering`, `poc/galaxy-navigator.html`
 - **Do:** Additive blending + GPU bloom post-pass, diffraction spikes on the brightest, nebulosity/dust; planet shading
   at system scale.

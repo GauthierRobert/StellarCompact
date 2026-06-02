@@ -189,3 +189,171 @@ describe('WebglDrawLayer', () => {
     layer.dispose();
   });
 });
+
+/**
+ * Coverage for the E8-02 post-processing pipeline. When the GL implementation
+ * exposes the framebuffer API, draw() must run a FIXED number of fullscreen
+ * passes (nebula + bright-pass + 2 blurs + composite = 5 drawArrays calls) plus
+ * the single instanced star pass — bounded per-frame work regardless of star
+ * count. We assert the pass counts so the frame budget stays structurally
+ * bounded, and that an active-system scene also issues a planet instanced pass.
+ */
+describe('WebglDrawLayer post-processing (FBO-capable stub)', () => {
+  interface PostRec {
+    instanced: number;
+    arrays: { first: number; count: number }[];
+    framebuffers: number;
+    textures: number;
+  }
+
+  function fbWebgl2(): { gl: WebGL2RenderingContext; rec: PostRec } {
+    const rec: PostRec = {
+      instanced: 0,
+      arrays: [],
+      framebuffers: 0,
+      textures: 0,
+    };
+    let id = 0;
+    const gl = {
+      VERTEX_SHADER: 1,
+      FRAGMENT_SHADER: 2,
+      ARRAY_BUFFER: 3,
+      STATIC_DRAW: 4,
+      DYNAMIC_DRAW: 5,
+      FLOAT: 6,
+      TRIANGLE_STRIP: 7,
+      TRIANGLES: 70,
+      COLOR_BUFFER_BIT: 8,
+      BLEND: 9,
+      DEPTH_TEST: 10,
+      ONE: 11,
+      LINK_STATUS: 12,
+      COMPILE_STATUS: 13,
+      FRAMEBUFFER: 20,
+      COLOR_ATTACHMENT0: 21,
+      TEXTURE_2D: 22,
+      RGBA: 23,
+      UNSIGNED_BYTE: 24,
+      TEXTURE_MIN_FILTER: 25,
+      TEXTURE_MAG_FILTER: 26,
+      TEXTURE_WRAP_S: 27,
+      TEXTURE_WRAP_T: 28,
+      LINEAR: 29,
+      CLAMP_TO_EDGE: 30,
+      TEXTURE0: 33984,
+      SRC_ALPHA: 40,
+      ONE_MINUS_SRC_ALPHA: 41,
+      createShader: () => ({}),
+      shaderSource: () => undefined,
+      compileShader: () => undefined,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      deleteShader: () => undefined,
+      createProgram: () => ({ id: id++ }),
+      attachShader: () => undefined,
+      linkProgram: () => undefined,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteProgram: () => undefined,
+      getUniformLocation: () => ({ id: id++ }),
+      createVertexArray: () => ({}),
+      bindVertexArray: () => undefined,
+      deleteVertexArray: () => undefined,
+      createBuffer: () => ({}),
+      deleteBuffer: () => undefined,
+      bindBuffer: () => undefined,
+      bufferData: () => undefined,
+      enableVertexAttribArray: () => undefined,
+      vertexAttribPointer: () => undefined,
+      vertexAttribDivisor: () => undefined,
+      disable: () => undefined,
+      enable: () => undefined,
+      blendFunc: () => undefined,
+      clearColor: () => undefined,
+      clear: () => undefined,
+      viewport: () => undefined,
+      useProgram: () => undefined,
+      uniform1i: () => undefined,
+      uniform1f: () => undefined,
+      uniform2f: () => undefined,
+      activeTexture: () => undefined,
+      createFramebuffer: () => {
+        rec.framebuffers++;
+        return {};
+      },
+      deleteFramebuffer: () => undefined,
+      bindFramebuffer: () => undefined,
+      framebufferTexture2D: () => undefined,
+      createTexture: () => {
+        rec.textures++;
+        return {};
+      },
+      deleteTexture: () => undefined,
+      bindTexture: () => undefined,
+      texImage2D: () => undefined,
+      texParameteri: () => undefined,
+      drawArrays: (_m: number, first: number, count: number) => {
+        rec.arrays.push({ first, count });
+      },
+      drawArraysInstanced: () => {
+        rec.instanced++;
+      },
+    } as unknown as WebGL2RenderingContext;
+    return { gl, rec };
+  }
+
+  const view: ViewTransform = {
+    scale: 8, // > 2.2 so planet detail is active
+    dpr: 1,
+    widthPx: 800,
+    heightPx: 600,
+    w2s: (wx, wy) => ({ x: 400 + wx * 8, y: 300 + wy * 8 }),
+  };
+
+  function activeScene(stars: number): RenderScene {
+    return {
+      stars: Array.from({ length: stars }, (_, i) => ({
+        id: i + 1,
+        x: 0,
+        y: 0,
+        k: i % 7,
+        b: 0.9,
+        sz: 1.2,
+        g: 1,
+        activeSystemId: i + 1,
+      })),
+      aggregates: [],
+      routes: [],
+      rMax: 1000,
+    };
+  }
+
+  it('allocates scene + 2 bloom FBOs and runs a bounded set of passes', () => {
+    const { gl, rec } = fbWebgl2();
+    const layer = new WebglDrawLayer(fakeCanvas(gl));
+    layer.resize(800, 600, 1);
+    layer.draw(activeScene(4), view, 1.0);
+    // 3 offscreen targets: scene (full res) + bloomA + bloomB (1/4 res).
+    expect(rec.framebuffers).toBe(3);
+    expect(rec.textures).toBe(3);
+    // Fullscreen passes: nebula + bright + blur-h + blur-v + composite = 5.
+    expect(rec.arrays.length).toBe(5);
+    for (const a of rec.arrays) {
+      expect(a.count).toBe(3); // each is the single fullscreen triangle
+    }
+    // Instanced passes: the star pass + the planet pass = 2.
+    expect(rec.instanced).toBe(2);
+    layer.dispose();
+  });
+
+  it('keeps the pass count fixed as star count grows (bounded frame budget)', () => {
+    const { gl, rec } = fbWebgl2();
+    const layer = new WebglDrawLayer(fakeCanvas(gl));
+    layer.resize(800, 600, 1);
+    layer.draw(activeScene(50_000), view, 1.0);
+    // Same fixed 5 fullscreen passes regardless of how many stars are visible.
+    expect(rec.arrays.length).toBe(5);
+    expect(rec.instanced).toBe(2); // stars + planets, still two instanced calls
+    layer.dispose();
+  });
+});

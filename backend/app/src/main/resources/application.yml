@@ -4,3 +4,17 @@
 spring:
   application:
     name: stellar-compact
+
+stellar-compact:
+  orchestrator:
+    # Tick-loop timings (card E4-05). These are ORCHESTRATION timings (wall-clock
+    # deadlines / pacing), deliberately outside the deterministic engine boundary -
+    # a slower or faster deadline must never change resolved state (principle 1).
+    # Each agent-calling phase fans out under its own shared deadline; a Sovereign
+    # that misses the deadline contributes Hold and is cancelled (the galaxy never
+    # waits on one brain). Durations parse as ISO-8601 or the Spring "5s"/"300ms" form.
+    tick:
+      interval: 5s              # cadence between tick starts
+      negotiation-timeout: 3s   # shared per-phase deadline for the Negotiation fan-out
+      action-timeout: 8s        # shared per-phase deadline for the Action fan-out
+      negotiation-rounds: 1     # negotiation rounds per tick (0 skips negotiation; E4-06)

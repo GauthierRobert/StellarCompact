@@ -345,7 +345,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** well-formed output parses to typed `Action[]`; malformed/ambiguous output is rejected (→ re-prompt path).
 
 ### E4-04 · Validate-after-parse + single re-prompt
-- **Status:** ☐ Todo · **Module:** agent-runtime · **Depends on:** E4-03, E1-04 · **Delegate to:** agent-runtime-developer · 🔒
+- **Status:** ✅ Done · **Module:** agent-runtime · **Depends on:** E4-03, E1-04 · **Delegate to:** agent-runtime-developer · 🔒
 - **Read first:** `docs/architecture/03-agent-runtime.md` §2 (Output handling), `.claude/rules/00-principles.md` #5
 - **Do:** Validate each parsed action against engine rules; on rejection, **one** re-prompt that includes the specific
   rejection reason; still invalid/timed-out ⇒ drop that action (faction may `Hold`).
@@ -474,7 +474,7 @@ client/agent-visible read (flagged 🔒 below).
 # E8 — Scale to billions  *(Phase 3)* — read `galaxy-rendering`, `lod-tiling`, `procedural-galaxy`
 
 ### E8-01 · WebGL2 instanced renderer (swap canvas)
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E7-02 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E7-02 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `.claude/skills/galaxy-rendering`, `docs/architecture/02-galaxy-scale.md` §4
 - **Do:** Replace the canvas renderer with **WebGL2 instanced point sprites** behind the **same data contract**; one
   draw call for all visible stars from a compact buffer (pos/color/size/brightness).

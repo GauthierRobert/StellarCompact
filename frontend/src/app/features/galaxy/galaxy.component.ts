@@ -7,6 +7,7 @@ import {
   OnDestroy,
   inject,
   input,
+  signal,
   viewChild,
 } from '@angular/core';
 import { CameraStore, OverlayStore, type ZoomAnchor } from '../../stores';
@@ -17,6 +18,7 @@ import {
   type TilePayloadDto,
 } from './tile.service';
 import { CanvasDrawLayer } from './canvas-draw-layer';
+import { WebglDrawLayer } from './webgl-draw-layer';
 import {
   type GalaxyDrawLayer,
   type RenderAggregate,
@@ -27,7 +29,7 @@ import {
 } from './render-model';
 
 /**
- * Galaxy view — the small-galaxy-tier canvas renderer (E7-02).
+ * Galaxy view — WebGL2 instanced renderer (E8-01), Canvas2D fallback (E7-02).
  *
  * Responsibilities (all the framework-touching glue; NO drawing maths live here):
  *   - own the <canvas>, drive a requestAnimationFrame loop OUTSIDE Angular's
@@ -39,7 +41,13 @@ import {
  *     from the store's w2s + scale;
  *   - fetch LOD tiles via TileService keyed by camera.visibleBbox + levelF, map
  *     them into the decoupled RenderScene, and hand scene+transform to a
- *     GalaxyDrawLayer (Canvas2D today, WebGL2 in E8 with zero changes here).
+ *     GalaxyDrawLayer.
+ *
+ * Draw backend selection: prefer the WebGL2 instanced point-sprite layer (one
+ * draw call for the whole visible star field, 10^5-10^6 instances); fall back to
+ * the Canvas2D layer when a WebGL2 context cannot be created. Both implement the
+ * SAME GalaxyDrawLayer contract, so the component code below is identical for
+ * either backend. If neither can render, a fallback message is shown.
  *
  * The camera store is the single source of truth for pan/zoom; this component
  * only feeds it input events and reads its computed transforms.
@@ -48,15 +56,21 @@ import {
   selector: 'app-galaxy',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<canvas
-    #canvas
-    class="galaxy-canvas"
-    (pointerdown)="onPointerDown($event)"
-    (pointermove)="onPointerMove($event)"
-    (pointerup)="onPointerUp($event)"
-    (pointercancel)="onPointerUp($event)"
-    (wheel)="onWheel($event)"
-    (dblclick)="onDblClick($event)"
-  ></canvas>`,
+      #canvas
+      class="galaxy-canvas"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerUp($event)"
+      (wheel)="onWheel($event)"
+      (dblclick)="onDblClick($event)"
+    ></canvas>
+    @if (unsupported()) {
+      <div class="galaxy-fallback" role="alert">
+        Galaxy view unavailable: this browser cannot create a WebGL2 or 2D
+        canvas context.
+      </div>
+    }`,
   styles: [
     `
       :host {
@@ -74,6 +88,18 @@ import {
       }
       .galaxy-canvas:active {
         cursor: grabbing;
+      }
+      .galaxy-fallback {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        text-align: center;
+        color: #aab4d6;
+        font: 14px/1.5 system-ui, sans-serif;
+        pointer-events: none;
       }
     `,
   ],
@@ -93,6 +119,10 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
   private readonly zone = inject(NgZone);
 
   private draw: GalaxyDrawLayer | null = null;
+  /** True when no draw backend (WebGL2 nor Canvas2D) could be created. */
+  readonly unsupported = signal(false);
+  /** Which backend is active — exposed for diagnostics/tests. */
+  readonly backend = signal<'webgl2' | 'canvas2d' | 'none'>('none');
   private rafId = 0;
   private lastFrame = 0;
   private running = false;
@@ -118,8 +148,16 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     const canvas = this.canvasRef().nativeElement;
-    this.draw = new CanvasDrawLayer(canvas);
+    // Camera wiring is independent of the draw backend; set it up first so the
+    // store is correct even when no renderer is available.
     this.camera.setRMax(this.rMax());
+
+    this.draw = this.createDrawLayer(canvas);
+    if (!this.draw) {
+      this.unsupported.set(true);
+      this.backend.set('none');
+      return;
+    }
     this.syncViewport();
 
     // Observe element size for responsive resize (zoneless-friendly).
@@ -135,6 +173,27 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
         typeof performance !== 'undefined' ? performance.now() : 0;
       this.scheduleFrame();
     });
+  }
+
+  /**
+   * Select a draw backend: prefer the WebGL2 instanced layer, fall back to
+   * Canvas2D, and return null if neither can be created (caller shows the
+   * fallback message). Both honour the same GalaxyDrawLayer contract.
+   */
+  private createDrawLayer(canvas: HTMLCanvasElement): GalaxyDrawLayer | null {
+    try {
+      const layer = new WebglDrawLayer(canvas);
+      this.backend.set('webgl2');
+      return layer;
+    } catch {
+      // WebGL2 context creation/compile failed — degrade gracefully.
+    }
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      this.backend.set('canvas2d');
+      return new CanvasDrawLayer(canvas);
+    }
+    return null;
   }
 
   ngOnDestroy(): void {

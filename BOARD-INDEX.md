@@ -46,7 +46,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E4-01** ChatClient integration (Ollama default, pluggable) — *deps: E3-01* — agent-runtime-developer
 - ✅ **E4-02** Prompt assembly (persona+goals+rules+schema+example) — *deps: E4-01, E3-02* — agent-runtime-developer
 - ✅ **E4-03** 🔒 Structured-output coercion + defensive parse — *deps: E4-02, E1-02* — agent-runtime-developer
-- ☐ **E4-04** 🔒 Validate-after-parse + single re-prompt → Hold — *deps: E4-03, E1-04* — agent-runtime-developer
+- ✅ **E4-04** 🔒 Validate-after-parse + single re-prompt → Hold — *deps: E4-03, E1-04* — agent-runtime-developer
 - ☐ **E4-05** Tick orchestrator (4 phases, virtual threads, timeouts) — *deps: E4-04, E1-05* — agent-runtime-developer
 - ☐ **E4-06** Negotiation phase (rounds, messages, pending proposals) — *deps: E4-05* — agent-runtime-developer
 
@@ -70,7 +70,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ☐ **E7-06** Spectator view & public event feed — *deps: E7-02, E7-03* — frontend-developer
 
 ## E8 — Scale to billions (Phase 3)
-- ☐ **E8-01** WebGL2 instanced renderer (swap canvas) — *deps: E7-02* — galaxy-renderer-engineer
+- ✅ **E8-01** WebGL2 instanced renderer (swap canvas) — *deps: E7-02* — galaxy-renderer-engineer
 - ☐ **E8-02** Bloom / diffraction spikes / nebulosity — *deps: E8-01* — galaxy-renderer-engineer
 - ☐ **E8-03** Procedural catalog generator (server+client, same constants) — *deps: E2-01* — game-engine-developer
 - ☐ **E8-04** Quadtree/Hilbert tile service + payloads — *deps: E8-03, E6-03* — galaxy-renderer-engineer

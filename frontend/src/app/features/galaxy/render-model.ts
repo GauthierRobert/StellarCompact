@@ -87,6 +87,13 @@ export interface RenderStar {
   readonly g: number;
   /** Live system id if promoted (activeSystemId), else null (procedural scenery). */
   readonly activeSystemId: number | null;
+  /**
+   * LOD cross-fade weight in [0,1]. 1 = fully shown; <1 during a zoom-boundary
+   * transition while this star's tile-level fades in/out. Defaults to 1 (no
+   * fade) so all pre-E8-05 callers are unaffected. The draw layer multiplies
+   * brightness/alpha by this so the two blended levels never pop.
+   */
+  readonly a?: number;
 }
 
 /** A density impostor from an aggregate (coarse-zoom) tile. */
@@ -95,6 +102,12 @@ export interface RenderAggregate {
   readonly y: number;
   /** Relative density weight, drives glow intensity. */
   readonly weight: number;
+  /**
+   * LOD cross-fade weight in [0,1] (see RenderStar.a). Defaults to 1. Lets the
+   * coarse aggregate layer fade out as the fine star layer fades in across a
+   * zoom boundary, so the galaxy glow dissolves into resolved stars seamlessly.
+   */
+  readonly a?: number;
 }
 
 /** Region colour/density summary for an aggregate tile. */

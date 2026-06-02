@@ -11,12 +11,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { CameraStore, OverlayStore, type ZoomAnchor } from '../../stores';
-import {
-  TileService,
-  toRenderAggregates,
-  toRenderStar,
-  type TilePayloadDto,
-} from './tile.service';
+import { lodTransition } from './tile.service';
+import { TileManager, type LayeredScene } from './tile-manager';
 import { CanvasDrawLayer } from './canvas-draw-layer';
 import { WebglDrawLayer } from './webgl-draw-layer';
 import {
@@ -115,7 +111,7 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
 
   private readonly camera = inject(CameraStore);
   private readonly overlay = inject(OverlayStore);
-  private readonly tiles = inject(TileService);
+  private readonly tileManager = inject(TileManager);
   private readonly zone = inject(NgZone);
 
   private draw: GalaxyDrawLayer | null = null;
@@ -323,23 +319,33 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
     const bbox = this.camera.visibleBbox();
     const levelF = this.camera.levelF();
     const rMax = this.rMax();
-    // coarse fetch key: rounded level + tile-grid cell of the bbox centre, so we
-    // only refetch when the user crosses a tile/level boundary, not every frame.
-    const level = Math.round(levelF + 3);
+    // Refetch/reassemble only when the visible tile set or the cross-fade blend
+    // meaningfully changes — never every frame. The key folds in:
+    //   - the active level pair + quantised fade weight (so the blend updates as
+    //     z eases through a zoom boundary, driving the cross-fade), and
+    //   - the tile-grid cell of the bbox centre (so panning across a tile edge
+    //     pulls the newly-visible tiles).
+    const t = lodTransition(levelF);
+    const fadeBucket = Math.round(t.secondaryWeight * 8); // quantised blend step
+    const cellInv = 16 / Math.max(1, rMax); // ~16 cells across the galaxy half-span
     const key =
-      level +
+      t.primary +
       ':' +
-      Math.round((bbox.minX + bbox.maxX) / 2 / Math.max(1, rMax) * 16) +
+      (t.secondary ?? -1) +
       ':' +
-      Math.round((bbox.minY + bbox.maxY) / 2 / Math.max(1, rMax) * 16);
+      fadeBucket +
+      ':' +
+      Math.round(((bbox.minX + bbox.maxX) / 2) * cellInv) +
+      ':' +
+      Math.round(((bbox.minY + bbox.maxY) / 2) * cellInv);
     if (key === this.lastFetchKey || this.fetchInFlight) {
       return;
     }
     this.lastFetchKey = key;
     this.fetchInFlight = true;
-    this.tiles
-      .fetchVisible(this.seed(), bbox, levelF, rMax)
-      .then((payloads) => this.ingestTiles(payloads))
+    this.tileManager
+      .assemble(this.seed(), bbox, levelF, rMax)
+      .then((layered) => this.ingestLayered(layered))
       .catch(() => {
         // swallow: a fetch failure leaves the previous scene in place
       })
@@ -348,20 +354,10 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
       });
   }
 
-  private ingestTiles(payloads: readonly TilePayloadDto[]): void {
-    const stars: RenderStar[] = [];
-    const aggregates: RenderAggregate[] = [];
-    for (const t of payloads) {
-      if (t.kind === 'starlist') {
-        for (const s of t.stars) {
-          stars.push(toRenderStar(s));
-        }
-      } else {
-        aggregates.push(...toRenderAggregates(t));
-      }
-    }
-    this.sceneStars = stars;
-    this.sceneAggregates = aggregates;
+  /** Adopt the cross-faded render input assembled by the TileManager. */
+  private ingestLayered(layered: LayeredScene): void {
+    this.sceneStars = layered.stars;
+    this.sceneAggregates = layered.aggregates;
   }
 
   // --- render-input assembly (decoupled from the draw backend) ---

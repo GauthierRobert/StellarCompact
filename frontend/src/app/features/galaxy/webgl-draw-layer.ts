@@ -726,25 +726,29 @@ export class WebglDrawLayer implements GalaxyDrawLayer {
     let o = 0;
     for (const st of scene.stars) {
       const c = SPECTRAL_PALETTE[st.k] ?? SPECTRAL_PALETTE[4];
+      // LOD cross-fade weight (default 1): scales perceptual brightness so an
+      // outgoing/incoming tile level fades by alpha and never pops (E8-05).
+      const fade = st.a === undefined ? 1 : st.a;
       buf[o] = st.x;
       buf[o + 1] = st.y;
       buf[o + 2] = c[0] / 255;
       buf[o + 3] = c[1] / 255;
       buf[o + 4] = c[2] / 255;
       buf[o + 5] = st.sz;
-      buf[o + 6] = st.b;
+      buf[o + 6] = st.b * fade;
       buf[o + 7] = st.g;
       buf[o + 8] = 0;
       o += FLOATS_PER_INSTANCE;
     }
     for (const ag of scene.aggregates) {
+      const fade = ag.a === undefined ? 1 : ag.a;
       buf[o] = ag.x;
       buf[o + 1] = ag.y;
       buf[o + 2] = 0.78;
       buf[o + 3] = 0.8;
       buf[o + 4] = 1.0;
       buf[o + 5] = 1.0;
-      buf[o + 6] = ag.weight;
+      buf[o + 6] = ag.weight * fade;
       buf[o + 7] = 0;
       buf[o + 8] = 1;
       o += FLOATS_PER_INSTANCE;

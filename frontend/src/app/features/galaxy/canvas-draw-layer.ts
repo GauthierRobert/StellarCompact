@@ -122,7 +122,8 @@ export class CanvasDrawLayer implements GalaxyDrawLayer {
       if (p.x < -r || p.x > W + r || p.y < -r || p.y > H + r) {
         continue;
       }
-      const alpha = Math.min(0.5, 0.08 + a.weight * 0.4);
+      const fade = a.a === undefined ? 1 : a.a;
+      const alpha = Math.min(0.5, 0.08 + a.weight * 0.4) * fade;
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
       g.addColorStop(0, 'rgba(225,225,255,' + alpha + ')');
       g.addColorStop(0.4, 'rgba(170,180,235,' + alpha * 0.4 + ')');
@@ -160,12 +161,15 @@ export class CanvasDrawLayer implements GalaxyDrawLayer {
         (0.45 + st.sz * 0.55) * DPR * (0.85 + Math.min(1.6, s * 0.02)),
       );
       const tw = 0.88 + 0.12 * Math.sin(now * 1.6 + st.id);
+      // LOD cross-fade weight (default 1): scales every alpha so an outgoing /
+      // incoming tile level fades smoothly and never pops (E8-05).
+      const fade = st.a === undefined ? 1 : st.a;
       const gr = r * 4.2;
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, gr);
       g.addColorStop(0, this.rgb(st.k, 1));
       g.addColorStop(0.25, this.rgb(st.k, 0.5));
       g.addColorStop(1, this.rgb(st.k, 0));
-      ctx.globalAlpha = (0.2 + 0.5 * st.b) * tw;
+      ctx.globalAlpha = (0.2 + 0.5 * st.b) * tw * fade;
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(p.x, p.y, gr, 0, 7);
@@ -173,7 +177,7 @@ export class CanvasDrawLayer implements GalaxyDrawLayer {
       const spikeT = clamp01((st.b - 0.6) / 0.3) * clamp01((r - 1.6 * DPR) / 2);
       if (spikeT > 0.03) {
         const L = gr * (2 + st.g * 1.6) * spikeT;
-        ctx.globalAlpha = 0.45 * spikeT * tw;
+        ctx.globalAlpha = 0.45 * spikeT * tw * fade;
         ctx.strokeStyle = this.rgb(st.k, 1);
         ctx.lineWidth = Math.max(0.5, r * 0.16);
         for (let a = 0; a < 4; a++) {
@@ -184,7 +188,7 @@ export class CanvasDrawLayer implements GalaxyDrawLayer {
           ctx.stroke();
         }
       }
-      ctx.globalAlpha = Math.min(1, (0.55 + st.b) * tw);
+      ctx.globalAlpha = Math.min(1, (0.55 + st.b) * tw) * fade;
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(p.x, p.y, r * 0.6, 0, 7);

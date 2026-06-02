@@ -9,9 +9,12 @@ import {
   TileService,
   TILE_MAX_LEVEL,
   TILE_STAR_LIST_MIN_LEVEL,
+  TILE_CACHE_CAPACITY,
   MAX_TILES_PER_VIEW,
   isStarListLevel,
   levelForZoom,
+  levelFracForZoom,
+  lodTransition,
   tileSide,
   tilesForBbox,
   tilesPerAxis,
@@ -252,5 +255,101 @@ describe('TileService (HTTP)', () => {
     }
     const out = await promise;
     expect(out.length).toBe(reqs.length);
+  });
+
+  it('re-entering a cached tile region is a HIT (no second HTTP request)', async () => {
+    const addr = { level: 3, x: 4, y: 4 };
+    const tile: StarListTileDto = {
+      kind: 'starlist',
+      level: 3,
+      x: 4,
+      y: 4,
+      bbox: { minX: 0, minY: 0, maxX: 250, maxY: 250 },
+      stars: [],
+      schemaVersion: 1,
+    };
+    const p1 = svc.fetchTile('s1', addr);
+    http.expectOne('/api/galaxy/s1/tile/3/4/4').flush(tile);
+    await p1;
+    expect(svc.hasCached('s1', addr)).toBe(true);
+    // Second fetch of the same address must NOT hit the network.
+    const p2 = svc.fetchTile('s1', addr);
+    http.expectNone('/api/galaxy/s1/tile/3/4/4');
+    await expect(p2).resolves.toEqual(tile);
+  });
+
+  it('evicts least-recently-used entries beyond TILE_CACHE_CAPACITY (bounded)', async () => {
+    // Fill the LRU past capacity with distinct addresses.
+    const total = TILE_CACHE_CAPACITY + 5;
+    const promises: Promise<unknown>[] = [];
+    for (let i = 0; i < total; i++) {
+      promises.push(svc.fetchTile('s1', { level: 5, x: i, y: 0 }));
+    }
+    const reqs = http.match((r) => r.url.startsWith('/api/galaxy/s1/tile/5/'));
+    for (const r of reqs) {
+      const parts = r.request.url.split('/');
+      const x = Number(parts[parts.length - 2]);
+      r.flush({
+        kind: 'starlist',
+        level: 5,
+        x,
+        y: 0,
+        bbox: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
+        stars: [],
+        schemaVersion: 1,
+      } satisfies StarListTileDto);
+    }
+    await Promise.all(promises);
+    // Cache never exceeds its capacity (memory O(capacity), never O(catalog)).
+    expect(svc.cacheSize).toBeLessThanOrEqual(TILE_CACHE_CAPACITY);
+    // The first-inserted (LRU) address was evicted; the most-recent survives.
+    expect(svc.hasCached('s1', { level: 5, x: 0, y: 0 })).toBe(false);
+    expect(svc.hasCached('s1', { level: 5, x: total - 1, y: 0 })).toBe(true);
+  });
+});
+
+describe('LOD cross-fade schedule (lodTransition)', () => {
+  it('mid-interval shows a SINGLE level at full weight (no blend, no 2nd fetch)', () => {
+    // z=0 -> levelFrac=3.0 exactly -> nearest=3, far from any boundary.
+    const t = lodTransition(0);
+    expect(t.primary).toBe(3);
+    expect(t.primaryWeight).toBe(1);
+    expect(t.secondary).toBeNull();
+    expect(t.secondaryWeight).toBe(0);
+  });
+
+  it('AT a boundary both neighbouring levels are active (50/50, no popping)', () => {
+    // z=0.5 -> levelFrac=3.5: exactly between levels 3 and 4.
+    const t = lodTransition(0.5);
+    expect(t.secondary).not.toBeNull();
+    // Both levels are rendered simultaneously mid-transition.
+    expect(t.primaryWeight).toBeGreaterThan(0);
+    expect(t.secondaryWeight).toBeGreaterThan(0);
+    // Weights sum to ~1 so additive brightness is preserved across the swap.
+    expect(t.primaryWeight + t.secondaryWeight).toBeCloseTo(1, 6);
+    // The two active levels are adjacent (the levels we are between).
+    const pair = [t.primary, t.secondary].sort((a, b) => a! - b!);
+    expect(pair).toEqual([3, 4]);
+  });
+
+  it('the fade weight ramps smoothly from window edge to the boundary', () => {
+    // Just inside the window vs at the boundary: secondaryWeight must increase.
+    const edge = lodTransition(0.5 - 0.34); // just inside fade window near level 3
+    const mid = lodTransition(0.5); // boundary 3<->4
+    expect(mid.secondaryWeight).toBeGreaterThan(edge.secondaryWeight);
+    expect(mid.secondaryWeight).toBeCloseTo(0.5, 6);
+  });
+
+  it('levelFracForZoom is the un-rounded clamped level (round == levelForZoom)', () => {
+    expect(levelFracForZoom(0)).toBeCloseTo(3, 6);
+    expect(Math.round(levelFracForZoom(1.2))).toBe(levelForZoom(1.2));
+    expect(levelFracForZoom(-99)).toBe(0);
+    expect(levelFracForZoom(999)).toBe(TILE_MAX_LEVEL);
+  });
+
+  it('does not fade past the grid edge (deepest level has no neighbour)', () => {
+    const t = lodTransition(999); // clamps to TILE_MAX_LEVEL
+    expect(t.primary).toBe(TILE_MAX_LEVEL);
+    expect(t.secondary).toBeNull();
   });
 });

@@ -246,7 +246,7 @@ final class SovereignFixtures {
 
         return new GameState(
                 42L, 5L, GameStatus.RUNNING, "small-default", 1,
-                factions, systems, fleets, treaties, Map.of(), orders);
+                factions, systems, fleets, treaties, Map.of(), orders, java.util.Set.of());
     }
 
     /** Lane adjacency for {@link #fogScenario()}: SYS_OWN &lt;-&gt; SYS_ADJ_ENEMY only. */
@@ -270,7 +270,7 @@ final class SovereignFixtures {
         return new GameState(
                 base.gameSeed(), base.tick(), base.status(), base.balanceProfileName(),
                 base.balanceProfileVersion(), base.factions(), base.systems(), base.fleets(),
-                treaties, base.routes(), base.marketOrders());
+                treaties, base.routes(), base.marketOrders(), base.wars());
     }
 
     static BalanceProfile profile() {

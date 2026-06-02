@@ -18,13 +18,15 @@ import java.time.Duration;
  * {@code GET /api/galaxy/{gameSeed}/tile/{level}/{x}/{y}} (rest-api spec; lod-tiling
  * skill; architecture 02 sections 3 and 5).
  *
- * <p>A tile is a pure function of {@code (gameSeed, level, x, y)} generated on
- * demand by {@link TileGenerator} - never stored. The response is heavily
- * cacheable: a strong {@code ETag} keyed by {@code (seed, level, x, y,
- * schemaVersion)} plus {@code Cache-Control: public, max-age=1y, immutable}.
- * {@code If-None-Match} short-circuits to {@code 304 Not Modified} without
- * generating the payload (the validator is computable from the address alone,
- * which is sound precisely because the content is a pure function of that address).
+ * <p>A tile is a pure function of {@code (gameSeed, level, x, y)} served via the
+ * generate-on-miss {@link TileCache} - never persisted; the cache is a pure
+ * optimisation keyed by the Hilbert-ordered quadkey (E8-04). The response is
+ * heavily cacheable downstream too: a strong {@code ETag} keyed by
+ * {@code (seed, level, x, y, schemaVersion)} plus
+ * {@code Cache-Control: public, max-age=1y, immutable}. {@code If-None-Match}
+ * short-circuits to {@code 304 Not Modified} without generating (or even touching
+ * the cache for) the payload - sound precisely because the content is a pure
+ * function of that address.
  *
  * <p>Blocking handlers on purpose: under Spring Boot 4 / Java 25 virtual threads
  * each request runs on its own carrier-cheap virtual thread, so straight-line
@@ -34,10 +36,10 @@ import java.time.Duration;
 @RequestMapping("/api/galaxy")
 public class TileController {
 
-    private final TileGenerator generator;
+    private final TileCache tileCache;
 
-    public TileController(TileGenerator generator) {
-        this.generator = generator;
+    public TileController(TileCache tileCache) {
+        this.tileCache = tileCache;
     }
 
     @GetMapping("/{gameSeed}/tile/{level}/{x}/{y}")
@@ -68,7 +70,7 @@ public class TileController {
                     .build();
         }
 
-        TilePayload payload = generator.generate(gameSeed, level, x, y);
+        TilePayload payload = tileCache.get(gameSeed, level, x, y);
         return ResponseEntity.ok()
                 .eTag(etag)
                 .cacheControl(cache)

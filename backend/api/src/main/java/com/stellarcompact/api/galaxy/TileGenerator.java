@@ -22,10 +22,13 @@ import java.util.List;
  * <p>Read-only against galaxy: this calls {@link CatalogGenerator} (E8-03's
  * shared per-cell facade) and {@link SpiralDensityField}; it does not modify them.
  *
- * <p>Active-system promotion ({@code activeSystemId}) is the concern of E2-05/
- * E6-01; until that is wired, every scenery star reports {@code null}. The thin
- * active overlay is served separately (see {@code OverlayController}) and is never
- * baked into these cacheable star tiles.
+ * <p>Active-system pointers ({@code activeSystemId}) are merged in at fine levels
+ * via the {@link ActiveSystemIndex} seam (E8-04): only the stable system-id
+ * reference is included so the client can join the separate thin overlay layer by
+ * id. The mutable overlay state itself (ownership, fleets, routes) is served
+ * separately (see {@code OverlayController}, E6-04) and is NEVER baked into these
+ * cacheable star tiles. Until promotion wiring (E2-05/E6-01) lands, the default
+ * {@link ActiveSystemIndex.NoActiveSystems} reports every star as scenery.
  */
 @Component
 public class TileGenerator {
@@ -44,11 +47,23 @@ public class TileGenerator {
     /** Cap on impostors emitted per aggregate tile (bounded payload). */
     private static final int MAX_IMPOSTORS = 64;
 
-    /** Generate the tile for an address. Caller must have validated the address. */
+    /**
+     * Generate the tile for an address with no active-system promotion (pure
+     * scenery). Caller must have validated the address.
+     */
     public TilePayload generate(long gameSeed, int level, int x, int y) {
+        return generate(gameSeed, level, x, y, new ActiveSystemIndex.NoActiveSystems());
+    }
+
+    /**
+     * Generate the tile for an address, merging active-system pointers at fine
+     * levels via {@code activeSystems}. Caller must have validated the address.
+     */
+    public TilePayload generate(long gameSeed, int level, int x, int y,
+                                ActiveSystemIndex activeSystems) {
         TileGrid.Bbox bbox = TileGrid.bbox(level, x, y);
         if (TileGrid.isStarListLevel(level)) {
-            return starList(gameSeed, level, x, y, bbox);
+            return starList(gameSeed, level, x, y, bbox, activeSystems);
         }
         return aggregate(level, x, y, bbox);
     }
@@ -107,9 +122,14 @@ public class TileGenerator {
      * tile output parity-locked to client-side scenery (one join, no drift).
      * Bounded by the tile size (fine tiles cover a tiny region), so this never
      * iterates the catalog.
+     *
+     * <p>Active-system pointers are merged here: for each derived star,
+     * {@code activeSystems} is asked whether the star has been promoted to a live
+     * system, and its system id (a pointer only) is attached. The mutable overlay
+     * state is served separately and never baked into this cacheable tile.
      */
     private TilePayload starList(long gameSeed, int level, int x, int y,
-                                 TileGrid.Bbox bbox) {
+                                 TileGrid.Bbox bbox, ActiveSystemIndex activeSystems) {
         double cs = GalaxyConstants.CELL_SIZE;
         int cMinX = (int) Math.floor(bbox.minX() / cs);
         int cMaxX = (int) Math.floor((bbox.maxX() - 1e-9) / cs);
@@ -125,11 +145,11 @@ public class TileGenerator {
                     if (!bbox.contains(s.x(), s.y())) {
                         continue;
                     }
+                    // Pointer only: the live overlay state is a separate layer.
+                    Long activeId = activeSystems.activeSystemId(gameSeed, s.id());
                     stars.add(new TilePayload.StarListTile.StarDto(
                             s.id(), s.x(), s.y(), s.spectral().name(),
-                            s.brightness(), s.size(),
-                            // E2-05/E6-01 promotion not yet wired: scenery only.
-                            null));
+                            s.brightness(), s.size(), activeId));
                 }
             }
         }

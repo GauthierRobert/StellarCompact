@@ -31,8 +31,10 @@ class TileControllerTest {
 
     @BeforeEach
     void setUp() {
+        TileCache cache = new TileCache(
+                new TileGenerator(), new ActiveSystemIndex.NoActiveSystems());
         mvc = MockMvcBuilders
-                .standaloneSetup(new TileController(new TileGenerator()))
+                .standaloneSetup(new TileController(cache))
                 .build();
     }
 

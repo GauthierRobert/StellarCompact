@@ -47,6 +47,8 @@ A tile is addressed by `(level, x, y)` (a quadkey), identical in spirit to slipp
 GET /galaxy/{gameSeed}/tile/{level}/{x}/{y}     → tile payload (aggregate or star list)
 ```
 
+**Implemented (E8-04).** The quadtree/Hilbert math is the framework-free `com.stellarcompact.galaxy.tile` package (`QuadTileScheme`, `HilbertCurve`, `TileBounds`); the api layer is a thin adapter (`TileGrid` → scheme) plus the HTTP serving (`TileController`) and a bounded generate-on-miss cache (`TileCache`) keyed by the Hilbert-ordered quadkey `(gameSeed, level, hilbertIndex(level,x,y))`. `MAX_LEVEL = 20` is the full deep-zoom descent; `STAR_LIST_MIN_LEVEL = 3` is the aggregate→star-list boundary. `hilbertIndex(level,x,y)` is a per-level bijection onto `[0, 4^L)` whose consecutive indices are spatial 4-neighbours, so a viewport maps to a few short contiguous index runs (the locality the cache/CDN exploits); the client (E8-05) uses the same addressing to compute and fetch visible tiles. Fine-level star tiles reuse the shared `CatalogGenerator` (E8-03) — byte-identical to client scenery — and carry an `activeSystemId` join pointer (via the `ActiveSystemIndex` seam) for promoted systems, never the mutable overlay state itself. See `docs/specs/rest-api.md` (Galaxy tiles).
+
 Because tiles for a given seed are immutable (scenery) or change rarely (active overlays), they are **CDN/HTTP-cacheable** like map tiles. Active-state overlays (ownership tint, fleet markers, live routes) are a **separate, thin, dynamic layer** fetched/streamed over WebSocket and composited on top — so the heavy star tiles stay cacheable while the game state stays live.
 
 ## 4. Client rendering — WebGL2 instancing, bounded per-frame work

@@ -24,17 +24,15 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  *       reach; the heavy tiles still go over plain HTTP, never this socket).</li>
  * </ul>
  *
- * <p><b>Security wiring (the crux).</b> Two interceptors are installed on the
- * client-inbound channel, in order:
- * <ol>
- *   <li>{@link StompPrincipalInterceptor} establishes the session principal at
- *       {@code CONNECT} (server-held identity).</li>
- *   <li>{@link OwnerViewAuthorizationInterceptor} gates every owner-view
- *       {@code SUBSCRIBE} against the {@link FactionOwnershipRegistry}, dropping any
- *       subscription to a faction the principal does not own.</li>
- * </ol>
- * Combined with user-destination routing in {@link LiveStreamPublisher}, a non-owner can
- * neither subscribe to nor receive another faction WorldView.
+ * <p><b>Security wiring (the crux).</b> Identity is established <em>at the HTTP
+ * handshake</em> (not per-frame): {@link HandshakeContext} pins the session principal and
+ * {@code gameId} into the WebSocket session before any STOMP frame is processed, so a
+ * client cannot assert or change its identity on a later frame. On the client-inbound
+ * channel, {@link OwnerViewAuthorizationInterceptor} then gates every owner-view
+ * {@code SUBSCRIBE} against the {@link FactionOwnershipRegistry} (default-deny), dropping
+ * any subscription to a faction the principal does not own. Combined with user-destination
+ * routing in {@link LiveStreamPublisher}, a non-owner can neither subscribe to nor receive
+ * another faction WorldView.
  *
  * <p><b>Why the simple broker.</b> Adequate for the current single-node, in-memory match
  * registry (E6-01). A later card swaps in a STOMP relay (RabbitMQ/Artemis) for

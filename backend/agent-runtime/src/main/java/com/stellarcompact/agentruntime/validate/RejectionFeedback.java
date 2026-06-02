@@ -27,8 +27,13 @@ import java.util.List;
  *       the model. Per the engine's own contract (RejectionReason javadoc) that message
  *       references only actor-knowable facts (own stockpiles, the public treaty ledger,
  *       an id the actor itself supplied) and is explicitly intended to be fed back
- *       verbatim. It is therefore trusted text. We still prefix it with the stable
- *       {@link RejectionReason} code so the agent gets the machine-readable reason too.</li>
+ *       verbatim. It is therefore trusted as to <em>source</em>. As defence-in-depth
+ *       (X-01 finding X01-1) we still {@link #sanitize(String) sanitize} it - stripping
+ *       control characters and capping length - because a handful of validator messages
+ *       interpolate an agent-supplied free-string (e.g. {@code shipSpec}), and a model
+ *       must never be able to restructure its own next prompt through that channel. We
+ *       prefix the stable {@link RejectionReason} code so the agent still gets the
+ *       machine-readable reason.</li>
  * </ul>
  *
  * The model's own free text (its messages, any prose around its JSON) is never an input
@@ -61,10 +66,40 @@ final class RejectionFeedback {
     static String forValidationRejections(List<ValidationResult.Rejected> rejections) {
         StringBuilder sb = new StringBuilder(HEADER);
         for (ValidationResult.Rejected r : rejections) {
-            sb.append("\n- [").append(r.code()).append("] ").append(r.message());
+            sb.append("\n- [").append(r.code()).append("] ").append(sanitize(r.message()));
         }
         return sb.toString();
     }
+
+    /**
+     * Defence-in-depth (X-01 finding X01-1): the engine {@code message} mostly references
+     * typed ids/enums, but a few validator messages interpolate an agent-supplied free-string
+     * verbatim (e.g. {@code BuildFleet.shipSpec}, a self-supplied {@code SystemId}). Those are
+     * bounded only by the parser's 32&nbsp;KiB string cap, so a model could embed newline-led
+     * instruction text and have it reflected into its own next prompt (self-injection). Before
+     * any engine message enters the re-prompt we strip CR/LF and other control characters
+     * (which is what would let injected text break out of the bullet line) and cap the length,
+     * so reflected agent text can never restructure the prompt. The blast radius was always
+     * same-agent-only (never another faction, never hidden state); this removes it entirely.
+     */
+    private static String sanitize(String message) {
+        if (message == null) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(Math.min(message.length(), MAX_MESSAGE_CHARS));
+        for (int i = 0; i < message.length() && out.length() < MAX_MESSAGE_CHARS; i++) {
+            char c = message.charAt(i);
+            // Replace any ISO control char (incl. \r, \n, \t) with a single space; keep the rest.
+            out.append(Character.isISOControl(c) ? ' ' : c);
+        }
+        if (message.length() > MAX_MESSAGE_CHARS) {
+            out.append('…');
+        }
+        return out.toString();
+    }
+
+    /** Upper bound on a single reflected validation message; ample for a real reason sentence. */
+    private static final int MAX_MESSAGE_CHARS = 200;
 
     /**
      * Fixed, model-uncontrolled sentence per parse-rejection code. No branch echoes the

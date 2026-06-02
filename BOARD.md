@@ -537,7 +537,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** completing small galaxies gates entry to large ones; only identity/reputation carries; no resource carry-over.
 
 ### E9-02 · Replay / spectator from (seed, action log)
-- **Status:** ☐ Todo · **Module:** all · **Depends on:** E1-17, E5-01, E7-06 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** all · **Depends on:** E1-17, E5-01, E7-06 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/07-victory-and-lifecycle.md` §5, `docs/architecture/03-agent-runtime.md` §4
 - **Do:** Reconstruct any archived match exactly from `gameSeed` + recorded action stream; drive the spectator UI from
   replay. Backbone of tournaments, debugging, agent analysis.
@@ -555,11 +555,12 @@ client/agent-visible read (flagged 🔒 below).
 ## Cross-cutting cards (run continuously)
 
 ### X-01 · Security review pass (recurring) 🔒
-- **Status:** ☐ Todo · **Delegate to:** security-reviewer
+- **Status:** ▶ Ongoing — pass #1 recorded (Phase-2 🔒 cards) · **Delegate to:** security-reviewer
 - **Read first:** `.claude/agents/security-reviewer.md`, `docs/architecture/01-system-overview.md` §3
 - **Do:** Review every 🔒-flagged card before it's marked Done: fog-of-war enforcement, agent-output validation,
   prompt-injection resistance, owner-only WorldView delivery, no hidden state leaking to client/agent.
 - **Done when:** each 🔒 card has a recorded sign-off; untrusted-client/untrusted-agent boundaries hold.
+- **Pass #1 verdicts** (E4-03/E4-04/E6-02/E6-04/E8-06): E4-03 **PASS**, E6-02 **PASS**, E8-06 **PASS**; E4-04 **PASS-with-notes** (X01-1, Low — `BuildFleet.shipSpec` reflected into the offending agent's own re-prompt; self-injection only, no fog/cross-faction breach — **FIXED**, see below); E6-04 **PASS-with-notes** (X01-2 javadoc drift — **FIXED**; X01-3 query-param handshake-auth stand-in — **tracked, must-fix before untrusted deploy**, authorization already server-side via `FactionOwnershipRegistry`). Cross-cutting: no WorldView leaks another faction's hidden state; closed `Action` schema + post-parse validation intact; determinism uncompromised.
 
 ### X-02 · Balance coherence pass (recurring)
 - **Status:** ☐ Todo · **Delegate to:** game-balance-designer

@@ -21,12 +21,22 @@ balanceProfile:
     buildTimes: { mine:.., shipyard:.., terraformerStep:.. }   # terraformerStep = ticks per terraform biome step (E1-08)
     costs: { ... }
     terraformChain: { toxic: arid, arid: terran, ... }          # biome -> next biome "toward habitable" (E1-08); a biome absent from the map is habitable / un-terraformable
-  combat:
-    tierMultipliers: { scout:.., corvette:.., cruiser:.., capital:.. }
-    varianceBand: [lo, hi]
-    defensePlatformBonus: ..
-    occupationLoyaltyPenalty: ..
-    warExhaustionPerLoss: ..
+  combat:                                  # combat power model + capture (E1-10; game-design 05 §2,§6)
+    tierMultipliers: { scout:.., corvette:.., cruiser:.., capital:.. }  # per-spec tier/tech multiplier; absent spec = 1.0
+    shipAttack:  { scout:.., corvette:.., cruiser:.., capital:.., freighter:0 }   # per-spec base attack; absent spec = 0
+    shipDefense: { scout:.., corvette:.., cruiser:.., capital:.., freighter:.. }  # per-spec base defence; absent spec = 0
+    stanceAttackMod:  { AGGRESSIVE:.., BALANCED:1.0, DEFENSIVE:.., EVASIVE:.. }    # per FleetStance attack mult; absent = 1.0
+    stanceDefenseMod: { AGGRESSIVE:.., BALANCED:1.0, DEFENSIVE:.., EVASIVE:.. }    # per FleetStance defence mult; absent = 1.0
+    terrainDefenseMod: ..                    # flat defender mult for a SYSTEM assault (home ground); 1.0 = none. Not applied fleet-vs-fleet
+    varianceBand: [lo, hi]                   # seeded roll bounds; attacker×roll vs defender×(1-roll'), per (seed,tick,battleId)
+    defensePlatformBonus: ..                 # defender mult when assaulted system has an active defensePlatform
+    lossFractionWinner: ..                   # fraction (0..1) of the WINNER's ships destroyed (attrition — victory is not costless)
+    lossFractionLoser: ..                    # fraction (0..1) of the LOSER's ships destroyed (loser loses more)
+    occupationLoyaltyPenalty: ..             # loyalty lost (floored at 0) on a freshly captured system (unrest brake)
+    warExhaustionPerLoss: ..                 # exhaustion accrued per ship lost
+    # power model: attackerPower = Σ(shipAttack[spec] × tierMult[spec]) × stanceAttackMod[stance]
+    #              defenderPower = Σ(shipDefense[spec] × tierMult[spec]) × stanceDefenseMod[stance] × terrainDefenseMod × (defensePlatformBonus if platform)  ← system assault only
+    # battleId is derived purely from (participants, contested lane/system, tick); seed each fight from SaltDomain.COMBAT.salt(battleId)
   tech:
     costs: { ... }
     times: { ... }

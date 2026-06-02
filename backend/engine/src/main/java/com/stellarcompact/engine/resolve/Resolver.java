@@ -128,7 +128,7 @@ public final class Resolver {
             case DIPLOMATIC_STATE -> resolveActionDriven(state, slice, ctx);
             case ESPIONAGE -> resolveActionDriven(state, slice, ctx);
             case MOVEMENT -> resolveActionDriven(state, slice, ctx);
-            case COMBAT -> resolveActionDriven(state, slice, ctx);
+            case COMBAT -> resolveCombat(state, slice, ctx);
             case INTERDICTION -> resolveActionDriven(state, slice, ctx);
             case DEVELOPMENT -> resolveDevelopment(state, slice, ctx);
             case COLONISATION -> resolveActionDriven(state, slice, ctx);
@@ -152,6 +152,23 @@ public final class Resolver {
                                            StepContext ctx) {
         GameState afterActions = resolveActionDriven(state, slice, ctx);
         return MarketResolution.resolve(afterActions, ctx.profile(), ctx.ledger());
+    }
+
+    /**
+     * The COMBAT step (E1-10; game-design 05 sections 1-2,6). Resolves the ordered
+     * {@code Attack} action slice through {@link CombatResolution}: each attack is a
+     * fleet-vs-fleet engagement or a system assault that captures the system on a win.
+     * Power, the seeded variance band, the proportional loss fractions and the
+     * occupation penalty all come from {@code BalanceProfile.Combat} (rule 6); each
+     * battle is seeded from {@code gameSeed XOR tick XOR battleId} so the same tick
+     * reproduces the same outcome. Combat applies its losses/capture directly to the
+     * snapshot (no resource spend, so nothing routes through the ledger). When fleet
+     * interception (E1-09) lands, its forced engagements will be resolved here too,
+     * through the same {@link CombatResolution} primitives.
+     */
+    private static GameState resolveCombat(GameState state, List<SubmittedAction> slice,
+                                           StepContext ctx) {
+        return CombatResolution.resolve(state, slice, ctx.seed(), ctx.tick(), ctx.profile());
     }
 
     /**
@@ -292,8 +309,15 @@ public final class Resolver {
         return s; // TODO(E1-09): advance along path; mid-transit interception.
     }
 
+    /**
+     * E1-10: Attack is handled by {@link #resolveCombat} via {@link CombatResolution}
+     * (power model, seeded variance band, proportional losses, system capture), not
+     * through this per-action stub, so this arm is unreachable for the COMBAT step. It
+     * remains only to keep the sealed-{@link Action} switch exhaustive (a new variant
+     * must still break compilation here).
+     */
     private static GameState stubAttack(GameState s, FactionId a, Action.Attack x, StepContext c) {
-        return s; // TODO(E1-10): combat resolution; system capture on assault win.
+        return s;
     }
 
     private static GameState stubBlockade(GameState s, FactionId a, Action.Blockade x, StepContext c) {

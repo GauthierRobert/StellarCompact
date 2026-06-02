@@ -55,4 +55,14 @@ public record Fleet(
         enroutePath = enroutePath.map(List::copyOf);
         ships = List.copyOf(ships);
     }
+
+    /**
+     * Copy-on-write: this fleet with a different ship stack (combat attrition, E1-10).
+     * Kept here so the COMBAT step can shrink a fleet without rebuilding the whole
+     * record at the call site. Every other field (id, owner, location, path, stance)
+     * is preserved.
+     */
+    public Fleet withShips(List<Ship> newShips) {
+        return new Fleet(id, owner, location, enroutePath, stance, newShips);
+    }
 }

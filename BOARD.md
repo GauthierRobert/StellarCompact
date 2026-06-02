@@ -385,7 +385,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** a tick's state round-trips DB↔engine; only active systems touched; promote/demote persisted.
 
 ### E5-03 · Transactional tick commit + resume
-- **Status:** ☐ Todo · **Module:** persistence · **Depends on:** E5-02, E4-05 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** persistence · **Depends on:** E5-02, E4-05 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/architecture/03-agent-runtime.md` §6
 - **Do:** A tick **fully commits or rolls back**; event log appended in order; a paused/crashed galaxy **resumes from the
   last committed tick + event log**.
@@ -488,7 +488,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** visual quality matches/exceeds the PoC's luminous look; all GPU-side; frame budget held.
 
 ### E8-03 · Procedural catalog generator (server + client, identical constants)
-- **Status:** ☐ Todo · **Module:** galaxy/frontend · **Depends on:** E2-01 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** galaxy/frontend · **Depends on:** E2-01 · **Delegate to:** game-engine-developer
 - **Read first:** `.claude/skills/procedural-galaxy`, `docs/architecture/02-galaxy-scale.md` §2
 - **Do:** Scale the E2 generator to billions: server and client derive the **same star from the same seed+coords** with
   shared constants, so the client renders scenery it was never sent.

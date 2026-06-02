@@ -171,13 +171,55 @@ public record BalanceProfile(
      *       moves the other way. Keeping the numeraire in config (rule 6) avoids
      *       hardcoding which resource is "money". A directed peer offer carries its
      *       own give/receive bundles and does not use this.</li>
+     *   <li>{@code blockadeThroughputFactor} - E1-11: the fraction (0..1) of a route's
+     *       throughput a hostile blockade removes (game-design 05 section 5 "throttle
+     *       their economy"). A {@code 1.0} chokes the route completely; a {@code 0.0}
+     *       (the inert default) is no effect. The INTERDICTION step flips the choked
+     *       route to {@link com.stellarcompact.engine.state.RouteStatus#BLOCKADED} and
+     *       this factor scales the throughput the economy/Influence steps then read.</li>
+     *   <li>{@code raidStealFraction} - E1-11: the maximum fraction (0..1) of a route's
+     *       per-cycle cargo a raid steals (game-design 05 section 5 "steal a shipment
+     *       (seeded)"). The actual steal is this fraction scaled by a seeded roll in
+     *       {@code [0,1)} (so a raid's haul is variable, not fixed), drawn from
+     *       {@code gameSeed XOR tick XOR SaltDomain.RAID.salt(routeId)}. A {@code 0.0}
+     *       (the inert default) steals nothing.</li>
      * </ul>
      */
     public record Market(
             String matchPolicy,
             double routeInfluencePerVolume,
-            String currency
+            String currency,
+            // --- E1-11 blockade & raid (append-only; inert defaults for older profiles) ---
+            double blockadeThroughputFactor,
+            double raidStealFraction
     ) {
+        /**
+         * Compact constructor clamping the E1-11 fractions into {@code [0,1]} so a
+         * malformed profile cannot over-steal or over-choke. Both are additive; a
+         * pre-E1-11 profile that omits them parses to {@code 0.0} (the inert default:
+         * a blockade that removes nothing, a raid that steals nothing) and stays
+         * loadable - forward-compatible like the other additive blocks.
+         */
+        public Market {
+            blockadeThroughputFactor = clampFraction(blockadeThroughputFactor);
+            raidStealFraction = clampFraction(raidStealFraction);
+        }
+
+        /**
+         * Backwards-compatible three-arg constructor predating the E1-11 interdiction
+         * knobs: delegates with both inert {@code 0.0} defaults. Lets pre-E1-11
+         * fixtures/profiles that build a Market positionally keep compiling unchanged.
+         */
+        public Market(String matchPolicy, double routeInfluencePerVolume, String currency) {
+            this(matchPolicy, routeInfluencePerVolume, currency, 0.0, 0.0);
+        }
+
+        private static double clampFraction(double v) {
+            if (v < 0.0) {
+                return 0.0;
+            }
+            return Math.min(v, 1.0);
+        }
     }
 
     /**

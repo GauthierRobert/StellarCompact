@@ -16,7 +16,9 @@ balanceProfile:
   market:
     matchPolicy: priceTimePriority
     routeInfluencePerVolume: ..
-    currency: ENERGY            # PhysicalResource a market order price is denominated in (E1-07)
+    currency: ENERGY                  # PhysicalResource a market order price is denominated in (E1-07)
+    blockadeThroughputFactor: ..      # E1-11: fraction (0..1) of a route's throughput a blockade removes (1.0 = fully choked); INTERDICTION step flips the route to BLOCKADED, economy/Influence scale volume by this
+    raidStealFraction: ..             # E1-11: MAX fraction (0..1) of a route's per-cycle cargo a raid steals; actual = fraction × seeded roll in [0,1) from gameSeed⊕tick⊕SaltDomain.RAID.salt(routeId); split across hauled resources, debited owner / credited raider via the ledger
   construction:
     buildTimes: { mine:.., shipyard:.., terraformerStep:.. }   # terraformerStep = ticks per terraform biome step (E1-08)
     costs: { ... }

@@ -10,14 +10,25 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { CameraStore, OverlayStore, type ZoomAnchor } from '../../stores';
+import {
+  CameraStore,
+  FactionStore,
+  OverlayStore,
+  type ZoomAnchor,
+} from '../../stores';
 import { lodTransition } from './tile.service';
 import { TileManager, type LayeredScene } from './tile-manager';
 import { CanvasDrawLayer } from './canvas-draw-layer';
 import { WebglDrawLayer } from './webgl-draw-layer';
 import {
+  buildOverlayMarks,
+  buildOverlayRoutes,
+  indexStarsBySystemId,
+} from './overlay-layer';
+import {
   type GalaxyDrawLayer,
   type RenderAggregate,
+  type RenderOverlayMark,
   type RenderRoute,
   type RenderScene,
   type RenderStar,
@@ -111,6 +122,7 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
 
   private readonly camera = inject(CameraStore);
   private readonly overlay = inject(OverlayStore);
+  private readonly factions = inject(FactionStore);
   private readonly tileManager = inject(TileManager);
   private readonly zone = inject(NgZone);
 
@@ -362,49 +374,49 @@ export class GalaxyComponent implements AfterViewInit, OnDestroy {
 
   // --- render-input assembly (decoupled from the draw backend) ---
 
+  /**
+   * Assemble the per-frame scene. The star/aggregate field comes from the
+   * cacheable tiles (resolved in ingestLayered, refetched only on a tile-set
+   * change). The active overlay (ownership tint / fleet+battle / blockade marks
+   * + live routes) is rebuilt EVERY frame from the OverlayStore signals joined
+   * to the current visible stars by system id — so it tracks live STOMP/REST
+   * updates WITHOUT touching the tile cache or triggering any tile refetch (the
+   * heavy star tiles stay CDN-cacheable). Fog-correct: only systems present in
+   * the server-fed overlay store produce marks; nothing hidden is inferred.
+   */
   private buildScene(): RenderScene {
+    const overlay = this.buildOverlay();
     return {
       stars: this.sceneStars,
       aggregates: this.sceneAggregates,
-      routes: this.buildRoutes(),
+      routes: overlay.routes,
+      overlayMarks: overlay.marks,
       rMax: this.rMax(),
     };
   }
 
   /**
-   * Map the overlay store's active trade lanes into RenderRoute segments,
-   * resolving each endpoint to its star's world position from the visible set.
-   * Routes whose endpoints are not in view are skipped (bounded work).
+   * Join the active overlay to the visible star field by system id (E8-06).
+   * Indexes the visible promoted stars once, then asks the pure overlay-layer
+   * helpers to produce ownership/fleet/blockade marks and route segments. The
+   * faction colour for ownership tint is resolved from the FactionStore.
    */
-  private buildRoutes(): RenderRoute[] {
-    const active = this.overlay.activeRoutes();
-    if (active.length === 0) {
-      return [];
+  private buildOverlay(): {
+    marks: readonly RenderOverlayMark[];
+    routes: readonly RenderRoute[];
+  } {
+    const systems = this.overlay.allSystems();
+    const routes = this.overlay.activeRoutes();
+    if (systems.length === 0 && routes.length === 0) {
+      return { marks: [], routes: [] };
     }
-    const pos = new Map<string, RenderStar>();
-    for (const s of this.sceneStars) {
-      if (s.activeSystemId !== null) {
-        pos.set(String(s.activeSystemId), s);
-      }
-    }
-    const out: RenderRoute[] = [];
-    for (const r of active) {
-      const a = pos.get(r.fromSystemId);
-      const b = pos.get(r.toSystemId);
-      if (!a || !b) {
-        continue;
-      }
-      out.push({
-        id: r.routeId,
-        ax: a.x,
-        ay: a.y,
-        bx: b.x,
-        by: b.y,
-        kind: r.kind,
-        len: Math.hypot(a.x - b.x, a.y - b.y),
-      });
-    }
-    return out;
+    const byId = indexStarsBySystemId(this.sceneStars);
+    return {
+      marks: buildOverlayMarks(systems, byId, (id) =>
+        this.factions.getById(id)?.colour,
+      ),
+      routes: buildOverlayRoutes(routes, byId),
+    };
   }
 
   private buildTransform(): ViewTransform {

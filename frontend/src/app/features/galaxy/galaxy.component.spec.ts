@@ -3,7 +3,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { GalaxyComponent } from './galaxy.component';
-import { CameraStore } from '../../stores';
+import { CameraStore, FactionStore, OverlayStore } from '../../stores';
+import { TileManager } from './tile-manager';
+import type { RenderScene } from './render-model';
 
 /**
  * Component-level wiring tests. We deliberately do NOT assert canvas pixels;
@@ -106,6 +108,80 @@ describe('GalaxyComponent', () => {
     } as unknown as MouseEvent);
     // no stars loaded -> empty-space dive just bumps zoom toward the cursor
     expect(camera.state().tz).toBeGreaterThan(tzBefore);
+    fixture.destroy();
+  });
+
+  it('overlay-only change updates overlay render data WITHOUT a new tile fetch (E8-06)', () => {
+    const overlay = TestBed.inject(OverlayStore);
+    const factions = TestBed.inject(FactionStore);
+    const manager = TestBed.inject(TileManager);
+    const assembleSpy = vi
+      .spyOn(manager, 'assemble')
+      .mockResolvedValue({
+        stars: [],
+        aggregates: [],
+        transition: {
+          primary: 3,
+          secondary: null,
+          primaryWeight: 1,
+          secondaryWeight: 0,
+        },
+      });
+
+    const fixture = create();
+    const c = fixture.componentInstance as unknown as {
+      sceneStars: unknown[];
+      buildScene: () => RenderScene;
+    };
+    // a visible promoted star at system id 7
+    c.sceneStars = [
+      { id: 1, x: 5, y: -5, k: 4, b: 0.5, sz: 1, g: 0, activeSystemId: 7 },
+    ];
+    factions.applyTick({
+      tick: 1,
+      factions: [
+        {
+          factionId: 'f1',
+          name: 'F1',
+          colour: '#4ad6a0',
+          resources: { credits: 0, minerals: 0, influence: 0 },
+          reputation: 0,
+          systemCount: 1,
+          eliminated: false,
+        },
+      ],
+    });
+
+    const fetchesAfterCreate = assembleSpy.mock.calls.length;
+
+    // an overlay-only change (no tile-set change)
+    overlay.applyOverlayDelta({
+      changedSystems: [
+        {
+          systemId: '7',
+          ownerFactionId: 'f1',
+          activityLevel: 2,
+          blockaded: false,
+          battle: true,
+          asOfTick: 2,
+        },
+      ],
+      changedRoutes: [],
+      asOfTick: 2,
+    });
+
+    // building the scene reflects the live overlay...
+    const scene = c.buildScene();
+    expect(scene.overlayMarks!.length).toBe(1);
+    const mark = scene.overlayMarks![0];
+    // join-by-system-id: mark sits at system 7's star world position
+    expect(mark.x).toBe(5);
+    expect(mark.y).toBe(-5);
+    expect(mark.battle).toBe(true);
+    expect(mark.tint).not.toBeNull();
+
+    // ...and NO new tile fetch was triggered by the overlay change.
+    expect(assembleSpy.mock.calls.length).toBe(fetchesAfterCreate);
     fixture.destroy();
   });
 

@@ -1,0 +1,33 @@
+# Spec — Data Model (persistence)
+
+Described, not implemented. Split per Architecture 01 §6: small mutable **game state** in PostgreSQL; huge immutable **catalog** is procedural (not stored) with only active systems persisted.
+
+## PostgreSQL (mutable game state — bounded, ~thousands of rows per active galaxy)
+
+```
+game(id, seed, status, params_json, balance_profile, created_at)
+faction(id, game_id, name, owner_user_id, persona_json, goals_json, constraints_json,
+        reputation, influence, energy, minerals, food, tech, model_tier, status)
+active_system(id, game_id, seed_coords, name, owner_faction_id?, biome_summary, population, loyalty)
+planet(id, active_system_id, biome, slots_total, population)
+building(id, planet_id, slot_index, type, status, progress)
+fleet(id, game_id, faction_id, location_system_id?, enroute_path_json?, stance)
+ship(id, fleet_id, spec, count)
+treaty(id, game_id, type, parties_json, terms_json, signed_tick, expires_tick, status)
+route(id, game_id, system_a, system_b, kind, resources_json, volume, status)
+market_order(id, game_id, hub_system_id, side, resource, qty, price, faction_id, placed_tick, status)
+tech_progress(id, faction_id, tech_id, status, progress)
+event_log(id, game_id, tick, type, payload_json)            -- append-only; powers replay
+```
+
+## Procedural catalog (NOT stored)
+- A star at (seed, coords) is derived by hash; only `active_system` rows exist in the DB.
+- Promotion: colonising a procedural star inserts an `active_system` (+ planet/building rows).
+- Demotion: an abandoned active system can be deleted, reverting to pure procedural scenery.
+
+## Object store / CDN (tiles)
+- Precomputed/cached tile payloads keyed by (seed, level, x, y, schemaVersion).
+- Immutable for scenery; regenerable from seed at any time (cache is an optimisation, not a source of truth).
+
+## Determinism note
+The DB holds only the *divergence* from the procedural baseline (active systems + game state). Seed + DB + event_log fully reconstruct any tick.

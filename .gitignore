@@ -1,0 +1,33 @@
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.iml
+
+# ---- Node / Angular (frontend) ----
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+
+# ---- Java / Spring Boot (backend) ----
+target/
+build/
+.gradle/
+*.class
+*.jar
+*.war
+hs_err_pid*
+
+# ---- Logs / local env ----
+*.log
+.env
+.env.local
+*.local
+
+# ---- Claude harness local state ----
+.claude/settings.local.json

@@ -25,4 +25,11 @@ export const routes: Routes = [
         (m) => m.SpectatorComponent,
       ),
   },
+  {
+    path: 'spectate/:gameId',
+    loadComponent: () =>
+      import('./features/spectator/spectator.component').then(
+        (m) => m.SpectatorComponent,
+      ),
+  },
 ];

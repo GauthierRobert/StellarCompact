@@ -51,7 +51,15 @@ balanceProfile:
     intervalMs: ..            # small galaxy ~ seconds; large ~ minutes
     negotiationRounds: ..
     phaseTimeoutMs: ..
+  homePlacement:                          # seeded starting-position fairness (E2-04; game-design 01 §6)
+    factionCount: ..                      # homes to place, one per faction (>= 1)
+    minSeparationHops: ..                 # min lane hops between any two homes (>= 1); anti-cramping guarantee
+    neighbourhoodHops: ..                 # hop radius K defining a home's local neighbourhood for the balance measure (>= 0)
+    qualityToleranceFraction: ..          # max relative spread of neighbourhood quality across chosen homes, in [0,1]; smaller = stricter fairness
+    homeBiome: oceanic                    # cradle biome a home system must carry (the colonised home world the faction starts on)
 ```
+
+**Home placement (E2-04).** A pure function of `(gameSeed, lane graph, homePlacement config)` chooses one home system per faction such that (a) every pair of homes is at least `minSeparationHops` lane hops apart, and (b) the chosen homes' neighbourhood-quality scores — colonisable build capacity + habitable cradles + resource accessibility within `neighbourhoodHops` hops — all fall inside a band of width `qualityToleranceFraction × maxChosenQuality`, so no faction is gifted a runaway start. If the galaxy cannot satisfy the request (too few cradle candidates, or no separated+balanced set exists) placement fails deterministically rather than cramming factions together. The authoritative numbers live here; the framework-free `galaxy` module receives them via a mirror `HomePlacementConfig` (it cannot depend on the engine).
 
 ## Rules
 - Two named profiles to ship: `small-default` and `large-persistent`.

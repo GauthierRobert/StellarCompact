@@ -30,3 +30,6 @@ hs_err_pid*
 
 # ---- Claude harness local state ----
 .claude/settings.local.json
+
+# agent isolation worktrees (transient)
+.claude/worktrees/

@@ -40,14 +40,44 @@ public record BalanceProfile(
         Tech tech,
         Diplomacy diplomacy,
         Victory victory,
-        Tick tick
+        Tick tick,
+        // --- E2-04 home placement (append-only; see HomePlacement record below) ---
+        HomePlacement homePlacement
 ) {
 
+    /**
+     * Compact constructor. Movement (E1-09) and home placement (E2-04) are both
+     * additive; a profile (or fixture) that omits either gets the inert defaults
+     * ({@link Movement#defaults()} = free travel/interception off,
+     * {@link HomePlacement#defaults()}) so it stays loadable and deterministic
+     * (forward-compatible, like the tech DAG / terraform chain defaults).
+     */
     public BalanceProfile {
-        // Movement is additive in E1-09; an older profile that omits it gets the
-        // inert defaults (free travel, interception off) so it stays loadable and
-        // deterministic (forward-compatible, like the tech DAG / terraform chain).
         movement = movement == null ? Movement.defaults() : movement;
+        homePlacement = homePlacement == null ? HomePlacement.defaults() : homePlacement;
+    }
+
+    /**
+     * Backwards-compatible constructor without the E2-04 {@code homePlacement}
+     * block: delegates to the canonical constructor with the inert default. Lets
+     * pre-E2-04 fixtures that build a profile positionally (through {@code tick})
+     * keep compiling unchanged.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, HomePlacement.defaults());
     }
 
     /** Per-tick resource economy. */
@@ -327,5 +357,48 @@ public record BalanceProfile(
             int negotiationRounds,
             long phaseTimeoutMs
     ) {
+    }
+
+    /**
+     * E2-04 home placement tunables (game-design 01 section 6: homes placed with a
+     * minimum separation and balanced local resource potential, "so no Sovereign
+     * begins boxed-in or starved. Placement is seeded and reproducible.").
+     *
+     * <p>These are the authoritative values; the framework-free galaxy module cannot
+     * depend on the engine, so the orchestrator / promotion boundary copies them into
+     * the galaxy's mirror {@code HomePlacementConfig} to drive {@code
+     * HomePlacementGenerator}. Kept here (rule 6) so the placement is tunable per
+     * profile, never hardcoded in the generator.
+     *
+     * <ul>
+     *   <li>{@code factionCount} - homes to place, one per faction (>= 1).</li>
+     *   <li>{@code minSeparationHops} - minimum lane hops required between any two
+     *       homes; the anti-cramping guarantee (>= 1).</li>
+     *   <li>{@code neighbourhoodHops} - the hop radius K defining a home's local
+     *       neighbourhood for the balance measure (habitable/colonisable bodies and
+     *       resource accessibility within K hops) (>= 0).</li>
+     *   <li>{@code qualityToleranceFraction} - max relative spread of neighbourhood
+     *       quality across the chosen homes, in [0,1]; smaller = stricter fairness.</li>
+     *   <li>{@code homeBiome} - the cradle biome a home system must carry (the
+     *       colonised home world the faction starts on); a
+     *       {@link com.stellarcompact.engine.state.Biome#configKey()} value.</li>
+     * </ul>
+     */
+    public record HomePlacement(
+            int factionCount,
+            int minSeparationHops,
+            int neighbourhoodHops,
+            double qualityToleranceFraction,
+            String homeBiome
+    ) {
+        /**
+         * Inert defaults for a profile that omits the E2-04 block: a single faction,
+         * one-hop separation, a one-hop neighbourhood, a generous half tolerance, on the
+         * Oceanic cradle. Inert in the sense that it always loads; a real match supplies
+         * the profile's own values.
+         */
+        public static HomePlacement defaults() {
+            return new HomePlacement(1, 1, 1, 0.5, "oceanic");
+        }
     }
 }

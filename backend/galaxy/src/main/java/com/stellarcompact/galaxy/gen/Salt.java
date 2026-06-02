@@ -50,7 +50,19 @@ enum Salt {
      * pass), this seeds a deterministic, seed-stable ordering so the generated
      * graph is reproducible without relying on float-equality or insertion order.
      */
-    LANE_TIEBREAK;
+    LANE_TIEBREAK,
+
+    // --- E2-04 home placement deterministic tiebreak (append-only) ---
+
+    /**
+     * Tiebreak key for home placement: when two candidate home systems are equal
+     * in neighbourhood quality (and the id discriminator below also ties - which it
+     * cannot, ids are unique - this is only ever reached on quality ties), this
+     * seeds a deterministic, seed-stable ordering so the chosen home set is
+     * reproducible without relying on float-equality or list order. Different seeds
+     * can therefore pick different (equally fair) homes out of a tie.
+     */
+    HOME_TIEBREAK;
 
     /** @return the stable salt value mixed into the hash. */
     long value() {

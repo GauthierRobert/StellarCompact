@@ -191,5 +191,12 @@
     "intervalMs": 5000,
     "negotiationRounds": 2,
     "phaseTimeoutMs": 3000
+  },
+  "homePlacement": {
+    "factionCount": 4,
+    "minSeparationHops": 3,
+    "neighbourhoodHops": 2,
+    "qualityToleranceFraction": 0.35,
+    "homeBiome": "oceanic"
   }
 }

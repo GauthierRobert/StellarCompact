@@ -86,7 +86,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 ## Cross-cutting (recurring)
 - ▶ **X-01** 🔒 Security review pass (recurring) — pass #1 done: E4-03/E6-02/E8-06 PASS, E4-04/E6-04 PASS-with-notes (X01-1/X01-2 fixed; X01-3 tracked) — security-reviewer
 - ▶ **X-02** Balance coherence pass (recurring) — pass #1 done: 50/50 holds, no in-config dominant strategy; 4 engine-gap follow-ups noted in `docs/game-design/08-balance-coherence-notes.md` — game-balance-designer
-- ☐ **X-03** Spec sync (edit `docs/specs/` before code) — card owner
+- ▶ **X-03** Spec sync (recurring) — maintained in step this session (rest-api, websocket-protocol, agent-io-schema, balance-config, data-model, procedural-catalog-algorithm, 02-galaxy-scale) — card owner
 
 ## Milestones
 - **M1** Deterministic core — E0+E1+E2+E3 (headless match replays tick-identically)

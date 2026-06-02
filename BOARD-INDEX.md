@@ -84,8 +84,8 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E9-03** Tournament / season scaffolding + leaderboard — *deps: E9-01, E9-02* — game-balance-designer
 
 ## Cross-cutting (recurring)
-- ☐ **X-01** 🔒 Security review pass — security-reviewer
-- ☐ **X-02** Balance coherence pass — game-balance-designer
+- ▶ **X-01** 🔒 Security review pass (recurring) — pass #1 done: E4-03/E6-02/E8-06 PASS, E4-04/E6-04 PASS-with-notes (X01-1/X01-2 fixed; X01-3 tracked) — security-reviewer
+- ▶ **X-02** Balance coherence pass (recurring) — pass #1 done: 50/50 holds, no in-config dominant strategy; 4 engine-gap follow-ups noted in `docs/game-design/08-balance-coherence-notes.md` — game-balance-designer
 - ☐ **X-03** Spec sync (edit `docs/specs/` before code) — card owner
 
 ## Milestones

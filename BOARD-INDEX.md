@@ -59,7 +59,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E6-01** Match lifecycle REST — *deps: E1-15, E5-03* — agent-runtime-developer
 - ☐ **E6-02** 🔒 Faction config REST (owner redaction) — *deps: E6-01* — agent-runtime-developer
 - ✅ **E6-03** Tile + overlay endpoints (cacheable, ETag) — *deps: E2-01* — galaxy-renderer-engineer
-- ☐ **E6-04** 🔒 STOMP live stream (public topics + owner-only view) — *deps: E1-16, E4-05* — agent-runtime-developer
+- ✅ **E6-04** 🔒 STOMP live stream (public topics + owner-only view) — *deps: E1-16, E4-05* — agent-runtime-developer
 
 ## E7 — Frontend, canvas PoC port (Phase 2)
 - ✅ **E7-01** Signal stores (camera + game state) — *deps: E0-02* — frontend-developer
@@ -74,7 +74,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E8-02** Bloom / diffraction spikes / nebulosity — *deps: E8-01* — galaxy-renderer-engineer
 - ✅ **E8-03** Procedural catalog generator (server+client, same constants) — *deps: E2-01* — game-engine-developer
 - ✅ **E8-04** Quadtree/Hilbert tile service + payloads — *deps: E8-03, E6-03* — galaxy-renderer-engineer
-- ☐ **E8-05** Viewport tile fetch + cache + LOD cross-fade — *deps: E8-04, E8-01* — galaxy-renderer-engineer
+- ✅ **E8-05** Viewport tile fetch + cache + LOD cross-fade — *deps: E8-04, E8-01* — galaxy-renderer-engineer
 - ☐ **E8-06** 🔒 Active overlay layer composited on tiles — *deps: E8-05, E6-04* — galaxy-renderer-engineer
 - ☐ **E8-07** Floating origin + CDN / pre-bake — *deps: E8-05* — galaxy-renderer-engineer
 

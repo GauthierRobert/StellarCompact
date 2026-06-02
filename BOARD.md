@@ -418,7 +418,8 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** tile endpoint serves cacheable payloads with correct ETag; overlay is a thin diff; heavy data never on the socket.
 
 ### E6-04 · STOMP live stream
-- **Status:** ☐ Todo · **Module:** api · **Depends on:** E1-16, E4-05 · **Delegate to:** agent-runtime-developer · 🔒
+- **Status:** ✅ Done · **Module:** api · **Depends on:** E1-16, E4-05 · **Delegate to:** agent-runtime-developer · 🔒
+- **Security sign-off:** PENDING (X-01) — owner-only auth enforced via handshake-pinned principal + default-deny `FactionOwnershipRegistry.owns()` channel-interceptor gate on SUBSCRIBE + server-resolved user-destination routing; raw GameState never serialized (all per-faction output via WorldViewBuilder). Stand-in auth: principal/gameId from handshake query params, ownership via explicit `bind(...)` — replace `HandshakeContext.Resolver#determineUser` with verified-token auth before production.
 - **Read first:** `docs/specs/websocket-protocol.md`, `.claude/skills/realtime-websocket`
 - **Do:** Topics `…/ticks`, `…/events`, `…/overlay` (public) + `/user/queue/faction/{id}/view` (**owner-only** WorldView).
   Overlay deltas scoped to spectator bbox; reconnect resyncs via REST `overlay?sinceTick=`. Keep the channel light.
@@ -502,7 +503,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** any (level,x,y) yields the correct aggregate-or-star-list payload; tiles cacheable; merges active state at fine levels.
 
 ### E8-05 · Viewport tile fetching, caching, LOD cross-fade
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E8-04, E8-01 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E8-04, E8-01 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `.claude/skills/lod-tiling`, `docs/architecture/02-galaxy-scale.md` §4
 - **Do:** Client requests **only the tiles covering the viewport at the current zoom**; client-side tile cache;
   **cross-fade** outgoing/incoming levels at zoom boundaries (no popping). Per-frame work bounded by screen+zoom.

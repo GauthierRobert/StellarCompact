@@ -122,6 +122,46 @@ Implemented contract (E6-01):
 - All match-state reads carry `Cache-Control: no-store` (game state changes every tick). The live
   push of ticks/events/overlay over the websocket is **E6-04** (this card is REST-only).
 
+## Replay / spectator-from-(seed, action-log)
+
+```
+GET /api/games/{gameId}/replay           → ReplayManifest { gameId, gameSeed, profile, firstTick, lastTick, tickCount }
+GET /api/games/{gameId}/replay/{tick}     → ReplayFrame    { gameId, tick, status, events[], leaderboard[], reputations[] }
+```
+
+Implemented contract (E9-02 — deterministic replay; game-design 07 §5; architecture 03 §4):
+- **Deterministic re-resolution, server-side.** A concluded/archived (or in-progress) match is
+  replayed by re-resolving its recorded `(gameSeed, ordered action log per tick)` through the **same
+  pure engine `Resolver`** the live run used (the orchestrator `MatchReplay` driver, folding the
+  recorded validated batches; **one resolution path**, never a second). The driver re-asserts each
+  re-derived canonical state hash against the recorded witness, so a corrupted/incompatible log fails
+  loudly rather than serving a wrong frame. The action log is **never shipped to the client** — the
+  server re-resolves and serves per-tick frames, keeping the client thin and the engine authoritative.
+- **Manifest** (`GET …/replay`) is the scrub-bar metadata: the seekable tick range
+  (`firstTick..lastTick`), the frame count (`tickCount`), and the reproducibility root (`gameSeed`)
+  plus the active `profile`. An unknown match, or a match with **no resolved ticks** (created but never
+  started/advanced — nothing to replay), is `404`.
+- **Frame** (`GET …/replay/{tick}`) **seeks** directly to a tick: the fog-free public projection of
+  that replayed tick — the tick's public `events[]` in wire shape `{ type, parties[], systemId?, tick,
+  seq }`, the config-weighted `leaderboard[]` (engine `Scoring.rank` at this tick's snapshot, rank-1
+  first) and the public `reputations[]` ledger, plus the lifecycle `status`. **Seeking to tick N yields
+  exactly the state/events of tick N**, deterministic and order-independent of how the client got there
+  (the timeline is folded once server-side; the client never replays forward). Out-of-range ticks
+  **clamp** to the nearest end (a scrubbing client may drag freely), so a frame read only `404`s on an
+  unknown match / empty timeline.
+- **Same shapes as live (identical render).** A frame is shaped to feed the **same** frontend
+  stores/signals the live STOMP path feeds (events → `EventsStore`; `leaderboard` → the same
+  `LeaderboardResponse` shape; status → the tick heartbeat), so the spectator view renders replay
+  identically to live. The spectator UI gains **scrub/seek/play/pause/step**, entered via the route
+  query `?replay`.
+- **Public-only (principle 2).** A replay frame is a strictly-public spectator projection — it carries
+  only common-knowledge state (public events, the weighted leaderboard which leaks no hidden state, the
+  public reputation ledger). The authoritative `GameState` is never serialised; no faction's private
+  systems/fleets/stockpiles/tech ever leave the server.
+- **Determinism (principle 1).** Replay re-resolves through the pure resolver from `(seed, action
+  log)`; no wall-clock, no unseeded RNG enters the engine. The engine stays pure; the REST/recording
+  seam is Spring-side. Frames carry `Cache-Control: no-store` (uniform with other game-state reads).
+
 ## Sovereign (agent) configuration
 
 ```

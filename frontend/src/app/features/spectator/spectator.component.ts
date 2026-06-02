@@ -14,6 +14,7 @@ import { EventsStore, type PublicEvent } from '../../stores/events.store';
 import { FactionStore, type FactionSnapshot } from '../../stores/faction.store';
 import { StompClientService } from '../../services/stomp-client.service';
 import { MatchRestClientService, type LeaderboardEntry } from '../../services/match-rest-client.service';
+import { ReplayClientService } from '../../services/replay-client.service';
 
 /**
  * Spectator view — "AI as sport" mode (E7-06).
@@ -119,6 +120,11 @@ import { MatchRestClientService, type LeaderboardEntry } from '../../services/ma
           }
         </div>
 
+        <!-- Replay mode badge -->
+        @if (replayMode()) {
+          <div class="spec-replay-badge">REPLAY</div>
+        }
+
         <!-- Victory progress bars -->
         @if (factionStandings().length > 0) {
           <div class="spec-victory-section">
@@ -139,6 +145,42 @@ import { MatchRestClientService, type LeaderboardEntry } from '../../services/ma
           </div>
         }
       </div>
+
+      <!-- Replay scrub/seek bar (only in replay mode) -->
+      @if (replayMode() && replayActive()) {
+        <div class="spec-replay-bar" role="group" aria-label="Replay controls">
+          <button
+            type="button"
+            class="spec-replay-btn"
+            aria-label="Step back one tick"
+            (click)="onStepBack()"
+          >⏮</button>
+          <button
+            type="button"
+            class="spec-replay-btn spec-replay-btn--play"
+            [attr.aria-label]="replayPlaying() ? 'Pause' : 'Play'"
+            (click)="onTogglePlay()"
+          >{{ replayPlaying() ? '⏸' : '▶' }}</button>
+          <button
+            type="button"
+            class="spec-replay-btn"
+            aria-label="Step forward one tick"
+            (click)="onStepForward()"
+          >⏭</button>
+          <input
+            type="range"
+            class="spec-replay-scrub"
+            aria-label="Seek to tick"
+            [min]="replayFirstTick()"
+            [max]="replayLastTick()"
+            [value]="replayTick()"
+            (input)="onScrub($event)"
+          />
+          <span class="spec-replay-tick">
+            T{{ replayTick() }} / {{ replayLastTick() }}
+          </span>
+        </div>
+      }
     </div>
   `,
   styles: [`
@@ -366,6 +408,28 @@ import { MatchRestClientService, type LeaderboardEntry } from '../../services/ma
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
+    .spec-replay-badge {
+      margin: 6px 10px; align-self: flex-start; padding: 2px 8px;
+      font-size: 9px; letter-spacing: 2px; color: #ffd700;
+      border: 1px solid rgba(255,215,0,0.4); border-radius: 2px;
+    }
+    .spec-replay-bar {
+      position: absolute; left: 270px; right: 230px; bottom: 12px; z-index: 30;
+      display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+      background: rgba(0,3,10,0.9); border: 1px solid rgba(80,180,255,0.25);
+      border-radius: 6px; color: #b0d8f0;
+    }
+    .spec-replay-btn {
+      background: rgba(80,180,255,0.12); color: #b0d8f0; line-height: 1;
+      border: 1px solid rgba(80,180,255,0.3); border-radius: 3px;
+      width: 28px; height: 24px; font-size: 12px; cursor: pointer;
+    }
+    .spec-replay-btn--play { width: 34px; color: #4ad6a0; }
+    .spec-replay-scrub { flex: 1; accent-color: #4ad6a0; cursor: pointer; }
+    .spec-replay-tick {
+      font-size: 10px; font-variant-numeric: tabular-nums;
+      min-width: 70px; text-align: right; color: rgba(80,180,255,0.8);
+    }
   `],
 })
 export class SpectatorComponent implements OnInit, OnDestroy {
@@ -374,11 +438,27 @@ export class SpectatorComponent implements OnInit, OnDestroy {
   private readonly factionStore = inject(FactionStore);
   private readonly stompClient = inject(StompClientService);
   private readonly matchRest = inject(MatchRestClientService);
+  private readonly replay = inject(ReplayClientService);
 
   // ---- route params ----
   readonly gameId = signal<string>('');
   readonly seed = signal<string>('1');
   readonly rMax = signal<number>(1000);
+
+  /**
+   * Replay mode (E9-02): when the route has {@code ?replay} (or {@code ?replay=1}) the view is
+   * driven by the server-side deterministic replay instead of the live STOMP stream. The same
+   * stores/signals are fed, so the render is identical to live; the scrub bar lets the
+   * spectator seek/play/pause/step through the archived match.
+   */
+  readonly replayMode = signal<boolean>(false);
+
+  // ---- replay-driven signals (read straight from the replay service) ----
+  readonly replayActive = this.replay.active;
+  readonly replayPlaying = this.replay.playing;
+  readonly replayTick = this.replay.currentTick;
+  readonly replayFirstTick = this.replay.firstTick;
+  readonly replayLastTick = this.replay.lastTick;
 
   // ---- derived signals ----
 
@@ -393,17 +473,24 @@ export class SpectatorComponent implements OnInit, OnDestroy {
   /** Factions sorted by systemCount descending (live from faction store). */
   readonly factionStandings = this.factionStore.factions;
 
-  /** Leaderboard entries from REST (preferred; may be empty until polled). */
+  /**
+   * Leaderboard entries. In replay mode the source is the replay frame's leaderboard (fed by
+   * the {@link ReplayClientService}); live mode reads the polled REST leaderboard. Both are the
+   * same {@code LeaderboardResponse} shape, so the standings render identically.
+   */
   readonly leaderboardEntries = computed<readonly LeaderboardEntry[]>(() => {
-    const lb = this.matchRest.leaderboard();
+    const lb = this.replayMode() ? this.replay.leaderboard() : this.matchRest.leaderboard();
     return lb?.entries ?? [];
   });
 
   /** STOMP connection state string. */
   readonly connectionState = this.stompClient.connectionState;
 
-  /** Match status from REST game summary. */
+  /** Match status: the replay frame's status in replay mode, else the live REST summary. */
   readonly status = computed<string>(() => {
+    if (this.replayMode()) {
+      return this.replay.status();
+    }
     const s = this.matchRest.gameSummary();
     return s?.status ?? '-';
   });
@@ -424,7 +511,19 @@ export class SpectatorComponent implements OnInit, OnDestroy {
 
     if (!gameId) return;
 
-    // Connect STOMP public topics only; omit factionId => spectator-only, no owner queue.
+    // Replay mode is opt-in via the route query param ?replay (or ?replay=1).
+    const replayParam = this.route.snapshot.queryParamMap.get('replay');
+    const isReplay = replayParam !== null && replayParam !== '0' && replayParam !== 'false';
+    this.replayMode.set(isReplay);
+
+    if (isReplay) {
+      // Driven by the deterministic server-side replay, NOT the live socket. Loading the
+      // manifest seeks the first tick, which feeds the same stores the live path feeds.
+      void this.replay.load(gameId);
+      return;
+    }
+
+    // Live mode: connect STOMP public topics only; omit factionId => spectator-only.
     this.stompClient.connect({ gameId });
 
     // Fetch initial REST data.
@@ -436,8 +535,35 @@ export class SpectatorComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this._stopLeaderboardPolling();
-    this.stompClient.disconnect();
-    this.matchRest.reset();
+    if (this.replayMode()) {
+      this.replay.reset();
+    } else {
+      this.stompClient.disconnect();
+      this.matchRest.reset();
+    }
+  }
+
+  // ---- replay controls (scrub/seek/play) ----
+
+  /** Seek to the tick the scrub slider was dragged to. */
+  onScrub(event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.replay.pause();
+    void this.replay.seek(value);
+  }
+
+  onStepForward(): void {
+    this.replay.pause();
+    void this.replay.stepForward();
+  }
+
+  onStepBack(): void {
+    this.replay.pause();
+    void this.replay.stepBack();
+  }
+
+  onTogglePlay(): void {
+    this.replay.toggle();
   }
 
   // ---- leaderboard polling ----

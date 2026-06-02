@@ -4,6 +4,7 @@ import com.stellarcompact.engine.action.Action;
 import com.stellarcompact.engine.action.AgentResponse;
 import com.stellarcompact.engine.config.BalanceProfile;
 import com.stellarcompact.engine.config.BalanceProfileLoader;
+import com.stellarcompact.engine.hash.StateHasher;
 import com.stellarcompact.engine.map.LaneNetwork;
 import com.stellarcompact.engine.resolve.PublicEvent;
 import com.stellarcompact.engine.resolve.ResolveResult;
@@ -17,6 +18,8 @@ import com.stellarcompact.engine.state.LifecycleTransitions;
 import com.stellarcompact.engine.state.SystemId;
 import com.stellarcompact.engine.validation.ActionValidator;
 import com.stellarcompact.engine.validation.ValidationResult;
+import com.stellarcompact.orchestrator.match.MatchRecord;
+import com.stellarcompact.orchestrator.match.MatchReplay;
 import com.stellarcompact.orchestrator.sovereign.ScriptedSovereign;
 import com.stellarcompact.orchestrator.sovereign.Sovereign;
 import com.stellarcompact.orchestrator.sovereign.SystemAdjacency;
@@ -233,21 +236,59 @@ public class InMemoryMatchService implements MatchService {
         return new LeaderboardResponse(gameId, state.tick(), entries);
     }
 
+    @Override
+    public MatchReplay replayTimeline(String gameId) {
+        Match match = require(gameId);
+        // Snapshot the recorded log + replay base under the match lock, then build the
+        // timeline: MatchReplay re-folds the recorded (seed, action log) through the pure
+        // Resolver - the same single resolution path the live loop used (E9-02 constraint),
+        // re-asserting each tick's hash against the recorded witness as it goes.
+        GameState base = match.initialState();
+        MatchRecord record = match.toRecord();
+        if (base == null || record.tickCount() == 0) {
+            // Nothing has resolved yet (created but never started/advanced): there is no
+            // timeline to replay. Surface as a 404 (handled by the controller).
+            throw new MatchNotFoundException(
+                    "match " + gameId + " has no resolved ticks to replay");
+        }
+        return MatchReplay.build(record, base, match.profile(), match.network());
+    }
+
     // ===== test seam ===========================================================
 
     /**
-     * Synchronously resolve up to {@code ticks} ticks for a running match (test/diagnostic
-     * seam, mirroring the headless runner). Lets tests advance deterministically without the
-     * background loop. No-op once the match concludes.
+     * Synchronously resolve up to {@code ticks} ticks for a match (test/diagnostic seam,
+     * mirroring the headless runner). Lets tests advance <em>deterministically</em> without
+     * the racy background loop: the recommended pattern is {@code start} then {@code pause}
+     * (which stops the loop) then {@code advanceForTest}, so the tick count is exactly what
+     * the test asked for. A PAUSED match is therefore advanced too (it is a frozen-but-
+     * playable, non-terminal state); a CONCLUDED match stops resolution. The resolved snapshot
+     * is left in its post-tick status (RUNNING/PAUSED preserved) so subsequent reads/replay see
+     * the recorded ticks.
      *
      * @return the number of ticks actually resolved
      */
+    /**
+     * Transition a match to {@code RUNNING} <em>without</em> kicking the racy background loop
+     * (test seam). Combined with {@link #advanceForTest}, this lets a test resolve an exact,
+     * deterministic number of ticks (no loop window resolving an extra tick between start and
+     * pause). Drives {@code CREATED -> LOBBY -> RUNNING} through the same guard as {@link #start}.
+     */
+    void readyForTest(String gameId) {
+        Match match = require(gameId);
+        synchronized (match) {
+            transition(match, GameStatus.LOBBY);
+            transition(match, GameStatus.RUNNING);
+        }
+    }
+
     int advanceForTest(String gameId, int ticks) {
         Match match = require(gameId);
         int done = 0;
         for (int i = 0; i < ticks; i++) {
             synchronized (match) {
-                if (match.state().status() != GameStatus.RUNNING) {
+                GameStatus status = match.state().status();
+                if (status != GameStatus.RUNNING && status != GameStatus.PAUSED) {
                     break;
                 }
                 resolveOneTick(match);
@@ -291,6 +332,14 @@ public class InMemoryMatchService implements MatchService {
         match.appendEvents(tick, result.events());
 
         GameState resolved = result.state();
+        // E9-02: record this tick's validated action batch + canonical hash + events so the
+        // match is replayable from (seed, action log). Recording the already-validated batch
+        // (not re-deriving it) is exactly what the replay driver re-folds; storing the hash
+        // gives the per-tick determinism witness MatchReplay re-asserts. The PRE-resolution
+        // {@code state} is the replay base for the first recorded tick (the RUNNING snapshot
+        // at tick 0, NOT the CREATED bootstrap), so re-folding the log reproduces it exactly.
+        match.recordTick(state, tick, batch, StateHasher.sha256Hex(resolved), result.events());
+
         GameState committed = resolved.status() == GameStatus.CONCLUDED
                 ? resolved
                 : resolved.withTick(tick + 1);
@@ -410,8 +459,18 @@ public class InMemoryMatchService implements MatchService {
         private final LaneNetwork network;
         private final SystemAdjacency adjacency;
         private final List<Sovereign> seats;
+        /**
+         * The replay base (E9-02): the pre-resolution snapshot of the FIRST recorded tick -
+         * i.e. the RUNNING snapshot at tick 0, captured the moment the first tick resolves
+         * (NOT the CREATED bootstrap, whose status differs and would perturb the hash). The
+         * replay driver re-folds the recorded log from exactly this snapshot, so re-resolution
+         * reproduces every tick. Null until the first tick is recorded.
+         */
+        private GameState replayBase;
         private GameState state;
         private final List<LoggedEvent> events = new ArrayList<>();
+        /** The per-tick replay log: validated batch + canonical hash + events, in tick order. */
+        private final List<MatchRecord.TickRecord> recordedTicks = new ArrayList<>();
         private volatile Thread loop;
 
         Match(String id, BalanceProfile profile, LaneNetwork network, SystemAdjacency adjacency,
@@ -447,6 +506,10 @@ public class InMemoryMatchService implements MatchService {
             return seats;
         }
 
+        synchronized GameState initialState() {
+            return replayBase;
+        }
+
         synchronized GameState state() {
             return state;
         }
@@ -464,6 +527,37 @@ public class InMemoryMatchService implements MatchService {
 
         synchronized List<LoggedEvent> events() {
             return new ArrayList<>(events);
+        }
+
+        /**
+         * Record one resolved tick into the replay log (E9-02): the already-validated batch,
+         * the canonical post-tick hash and the tick's events - exactly the {@link
+         * MatchRecord.TickRecord} the replay driver re-folds and re-asserts.
+         */
+        synchronized void recordTick(GameState preResolution, long tick,
+                                     List<SubmittedAction> batch, String hash,
+                                     List<PublicEvent> tickEvents) {
+            if (replayBase == null) {
+                // Capture the replay base once: the pre-resolution snapshot of the first
+                // recorded tick (the RUNNING snapshot the live run resolved tick 0 from).
+                replayBase = preResolution;
+            }
+            recordedTicks.add(new MatchRecord.TickRecord(tick, batch, hash, tickEvents));
+        }
+
+        /**
+         * Snapshot the recorded {@code (seed, action log)} as a {@link MatchRecord} so the
+         * replay driver can re-resolve it. The outcome mirrors the live loop: a concluded
+         * snapshot is a VICTORY, otherwise the run stopped at its tick budget (TICK_LIMIT).
+         */
+        synchronized MatchRecord toRecord() {
+            GameState current = state;
+            MatchRecord.Outcome outcome = current.status() == GameStatus.CONCLUDED
+                    ? MatchRecord.Outcome.VICTORY
+                    : MatchRecord.Outcome.TICK_LIMIT;
+            // The gameSeed is constant across the match; read it from the current snapshot.
+            return new MatchRecord(current.gameSeed(), profile.name(),
+                    new ArrayList<>(recordedTicks), current, outcome);
         }
 
         /**

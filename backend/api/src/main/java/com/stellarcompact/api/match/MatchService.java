@@ -1,6 +1,7 @@
 package com.stellarcompact.api.match;
 
 import com.stellarcompact.engine.state.FactionId;
+import com.stellarcompact.orchestrator.match.MatchReplay;
 import com.stellarcompact.orchestrator.sovereign.WorldView;
 
 /**
@@ -93,4 +94,16 @@ public interface MatchService {
      * @throws MatchNotFoundException if no such match
      */
     LeaderboardResponse leaderboard(String gameId);
+
+    /**
+     * Build the deterministic replay timeline for {@code gameId} from its recorded
+     * {@code (seed, action log)} (board card E9-02). The match is re-resolved tick-by-tick
+     * through the same pure {@code Resolver} the live run used (one resolution path), so any
+     * tick can be sought. The returned {@link MatchReplay} is server-built and authoritative;
+     * the {@code ReplayController} projects per-tick frames from it (fog-free public state),
+     * keeping the client thin.
+     *
+     * @throws MatchNotFoundException if no such match
+     */
+    MatchReplay replayTimeline(String gameId);
 }

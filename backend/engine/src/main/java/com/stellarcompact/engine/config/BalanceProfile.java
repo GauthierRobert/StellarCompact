@@ -64,9 +64,28 @@ public record BalanceProfile(
     ) {
     }
 
-    /** Population growth and per-building caps. */
+    /**
+     * Population dynamics (economy 02 section 3).
+     *
+     * <ul>
+     *   <li>{@code growthPerFoodSurplus} - population gained per unit of a planet's
+     *       Food surplus per tick (a surplus world grows).</li>
+     *   <li>{@code declinePerFoodDeficit} - population lost per unit of a planet's
+     *       Food shortfall per tick when the colony cannot feed itself (famine).</li>
+     *   <li>{@code productionPerPop} - the per-tick production multiplier added per
+     *       unit of planet population; the population factor of the production
+     *       formula is {@code 1 + population x productionPerPop}.</li>
+     *   <li>{@code baseCap} - the population cap of a colony before any
+     *       cap-raising buildings; the effective cap is {@code baseCap + sum of
+     *       capByBuilding for the planet's active buildings}.</li>
+     *   <li>{@code capByBuilding} - per-building population-cap contribution.</li>
+     * </ul>
+     */
     public record Population(
             double growthPerFoodSurplus,
+            double declinePerFoodDeficit,
+            double productionPerPop,
+            long baseCap,
             Map<String, Integer> capByBuilding
     ) {
         public Population {

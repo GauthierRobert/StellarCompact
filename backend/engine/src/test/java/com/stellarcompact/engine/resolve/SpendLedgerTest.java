@@ -68,12 +68,48 @@ class SpendLedgerTest {
     }
 
     @Test
+    void creditAddsInflowAndSettlesNet() {
+        // E1-06: production credits inflow; settlement applies stock + credit - spend.
+        SpendLedger ledger = new SpendLedger();
+        ledger.credit(ALPHA, new ResourceBundle(0, 0, 10, 0, 0));   // +10 food
+        ledger.escrow(ALPHA, new ResourceBundle(5, 0, 0, 0, 0));    // -5 energy
+        assertFalse(ledger.isEmpty());
+        assertEquals(new ResourceBundle(0, 0, 10, 0, 0), ledger.creditedTo(ALPHA));
+
+        ResourceBundle stock = new ResourceBundle(100, 100, 100, 100, 100);
+        assertEquals(new ResourceBundle(95, 100, 110, 100, 100), ledger.settle(ALPHA, stock));
+    }
+
+    @Test
+    void settleFloorsEachComponentAtZero() {
+        // Overdraw is clamped to zero, never negative (economy 02 deficit model).
+        SpendLedger ledger = new SpendLedger();
+        ResourceBundle stock = new ResourceBundle(0, 5, 0, 0, 0);
+        ledger.escrow(ALPHA, new ResourceBundle(0, 60, 0, 0, 0)); // can only pay 5
+        assertEquals(new ResourceBundle(0, 0, 0, 0, 0), ledger.settle(ALPHA, stock));
+    }
+
+    @Test
+    void touchedReportsEveryCreditedOrEscrowedFaction() {
+        SpendLedger ledger = new SpendLedger();
+        ledger.escrow(ALPHA, new ResourceBundle(1, 0, 0, 0, 0));
+        ledger.credit(BETA, new ResourceBundle(0, 1, 0, 0, 0));
+        assertTrue(ledger.touched().contains(ALPHA));
+        assertTrue(ledger.touched().contains(BETA));
+        assertEquals(2, ledger.touched().size());
+    }
+
+    @Test
     void rejectsNullArguments() {
         SpendLedger ledger = new SpendLedger();
         assertThrows(IllegalArgumentException.class,
                 () -> ledger.escrow(null, ResourceBundle.ZERO));
         assertThrows(IllegalArgumentException.class,
                 () -> ledger.escrow(ALPHA, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.credit(null, ResourceBundle.ZERO));
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.credit(ALPHA, null));
         assertThrows(IllegalArgumentException.class,
                 () -> ledger.settle(ALPHA, null));
     }

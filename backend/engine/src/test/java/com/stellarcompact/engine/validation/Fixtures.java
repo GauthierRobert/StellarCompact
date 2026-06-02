@@ -147,7 +147,7 @@ final class Fixtures {
         return new BalanceProfile(
                 "small-default", 1,
                 new BalanceProfile.Resources(Map.of(), Map.of(), 0.1),
-                new BalanceProfile.Population(1.0, Map.of()),
+                new BalanceProfile.Population(1.0, 0.5, 0.1, 5, Map.of()),
                 new BalanceProfile.Market("priceTimePriority", 0.5),
                 new BalanceProfile.Construction(
                         Map.of("mine", 3),

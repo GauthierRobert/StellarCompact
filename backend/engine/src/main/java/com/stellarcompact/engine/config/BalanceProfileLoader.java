@@ -85,6 +85,9 @@ public final class BalanceProfileLoader {
         // population
         BalanceProfile.Population pop = req(p.population(), "population");
         require(pop.growthPerFoodSurplus() > 0.0, "population.growthPerFoodSurplus must be > 0");
+        require(pop.declinePerFoodDeficit() >= 0.0, "population.declinePerFoodDeficit must be >= 0");
+        require(pop.productionPerPop() >= 0.0, "population.productionPerPop must be >= 0");
+        require(pop.baseCap() >= 0, "population.baseCap must be >= 0");
         require(!pop.capByBuilding().isEmpty(), "population.capByBuilding must be non-empty");
 
         // market

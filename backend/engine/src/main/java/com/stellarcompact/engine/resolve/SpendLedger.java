@@ -45,6 +45,15 @@ public final class SpendLedger {
     private final Map<FactionId, ResourceBundle> pending = new LinkedHashMap<>();
 
     /**
+     * Accrued total credit (inflow) per faction this tick; the passive economy
+     * step (E1-06 production) credits a faction's gross production here so that
+     * settlement applies one net delta (credits minus debits) atomically. Kept
+     * separate from {@link #pending} so {@link #accrued} continues to report only
+     * the gross spend an agent committed (what {@link #wouldOverdraw} must guard).
+     */
+    private final Map<FactionId, ResourceBundle> credited = new LinkedHashMap<>();
+
+    /**
      * Record that {@code actor} owes {@code cost} this tick. Accumulates into the
      * faction's running total rather than debiting immediately - nothing touches a
      * stockpile until {@link #settle}. A zero/empty cost is a harmless no-op.
@@ -60,6 +69,34 @@ public final class SpendLedger {
             throw new IllegalArgumentException("SpendLedger.escrow: cost must be set");
         }
         pending.merge(actor, cost, ResourceBundle::plus);
+    }
+
+    /**
+     * Record an inflow {@code gain} for {@code actor} this tick (E1-06 passive
+     * production). Like {@link #escrow} it touches no stockpile until {@link
+     * #settle}; at settlement the net is {@code stockpile + credited - accrued},
+     * floored at zero per component (no negative balances - economy 02 deficit
+     * model). A zero/empty gain is a harmless no-op.
+     *
+     * @param actor the producing faction (never {@code null})
+     * @param gain  the resources to credit at settlement (never {@code null})
+     */
+    public void credit(FactionId actor, ResourceBundle gain) {
+        if (actor == null) {
+            throw new IllegalArgumentException("SpendLedger.credit: actor must be set");
+        }
+        if (gain == null) {
+            throw new IllegalArgumentException("SpendLedger.credit: gain must be set");
+        }
+        credited.merge(actor, gain, ResourceBundle::plus);
+    }
+
+    /**
+     * @return the total accrued credit (inflow) for {@code actor} so far this tick
+     * (never {@code null}; {@link ResourceBundle#ZERO} if nothing credited).
+     */
+    public ResourceBundle creditedTo(FactionId actor) {
+        return credited.getOrDefault(actor, ResourceBundle.ZERO);
     }
 
     /**
@@ -81,10 +118,22 @@ public final class SpendLedger {
     }
 
     /**
-     * @return {@code true} iff no spend has been escrowed this tick.
+     * @return {@code true} iff no spend has been escrowed and no inflow credited
+     * this tick - i.e. settlement would be a no-op.
      */
     public boolean isEmpty() {
-        return pending.isEmpty();
+        return pending.isEmpty() && credited.isEmpty();
+    }
+
+    /**
+     * @return the set of factions touched this tick by either an escrowed spend or
+     * a credited inflow; the {@link Resolver} settles exactly these. Order is
+     * unspecified - the caller settles per faction independently.
+     */
+    public java.util.Set<FactionId> touched() {
+        java.util.Set<FactionId> all = new java.util.LinkedHashSet<>(pending.keySet());
+        all.addAll(credited.keySet());
+        return all;
     }
 
     /**
@@ -94,21 +143,30 @@ public final class SpendLedger {
      * tick. Subtracting the summed total (not each spend in turn) is what makes the
      * pass atomic - the result is identical regardless of escrow order.
      *
-     * <p>The overdraft policy is intentionally minimal in this skeleton card: the
-     * accrued total is subtracted as-is (which may go negative, exactly as
-     * {@link ResourceBundle#minus} documents for the deficit/attrition model).
-     * E1-06/E1-07 replace this body with the chosen policy (reject marginal spend /
-     * clamp / cascade to attrition) <em>at this same seam</em>, after consulting
-     * {@link #wouldOverdraw}.
+     * <p>Overdraft policy (E1-06). The net applied is
+     * {@code stockpile + credited - accrued}, then <em>floored at zero per
+     * component</em>: a stockpile never goes negative (economy 02 - a faction that
+     * cannot pay upkeep suffers attrition, modelled by the PRODUCTION step, rather
+     * than holding an impossible negative balance). Production is credited and
+     * upkeep/spends are debited in the same net so the subtraction order cannot
+     * matter; flooring is the conservative deficit clamp. Whether a faction was in
+     * deficit (and therefore attrited) is decided by the PRODUCTION step via
+     * {@link #wouldOverdraw} before settlement; this clamp is the final guard.
      *
-     * @param actor      the faction to debit (never {@code null})
+     * @param actor      the faction to settle (never {@code null})
      * @param stockpiles its current stockpile (never {@code null})
-     * @return the post-debit stockpile
+     * @return the post-settlement stockpile, floored at zero per component
      */
     public ResourceBundle settle(FactionId actor, ResourceBundle stockpiles) {
         if (stockpiles == null) {
             throw new IllegalArgumentException("SpendLedger.settle: stockpiles must be set");
         }
-        return stockpiles.minus(accrued(actor));
+        ResourceBundle net = stockpiles.plus(creditedTo(actor)).minus(accrued(actor));
+        return new ResourceBundle(
+                Math.max(0.0, net.energy()),
+                Math.max(0.0, net.minerals()),
+                Math.max(0.0, net.food()),
+                Math.max(0.0, net.tech()),
+                Math.max(0.0, net.influence()));
     }
 }

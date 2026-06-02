@@ -32,6 +32,9 @@
   },
   "population": {
     "growthPerFoodSurplus": 0.25,
+    "declinePerFoodDeficit": 0.5,
+    "productionPerPop": 0.1,
+    "baseCap": 5,
     "capByBuilding": {
       "farm": 3,
       "marketHub": 1,

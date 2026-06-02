@@ -160,7 +160,7 @@ client/agent-visible read (flagged 🔒 below).
 - **🔒 Security prereq (from E1-04 review, spec §4a):** resource debits MUST be atomic/escrowed in a single authoritative pass so N validated spends in one tick cannot collectively overdraw one stockpile (validation affordability is only a per-action snapshot).
 
 ### E1-06 · Economy resolution
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-05, E0-03 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-05, E0-03 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/02-economy.md`
 - **Do:** Steps 6/9/11-ish: production (base×buildings×tech×population), upkeep, **deficit ⇒ attrition** (no negative
   balances), population growth/decline. All numbers from balance profile.

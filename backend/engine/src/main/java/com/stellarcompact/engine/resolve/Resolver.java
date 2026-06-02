@@ -215,8 +215,12 @@ public final class Resolver {
             return state;
         }
         GameState next = state;
-        for (Faction faction : state.factions().values()) {
-            ResourceBundle settled = ledger.settle(faction.id(), faction.stockpiles());
+        for (FactionId id : ledger.touched()) {
+            Faction faction = state.factions().get(id);
+            if (faction == null) {
+                continue;
+            }
+            ResourceBundle settled = ledger.settle(id, faction.stockpiles());
             if (!settled.equals(faction.stockpiles())) {
                 next = next.withFaction(faction.withStockpiles(settled));
             }
@@ -316,7 +320,10 @@ public final class Resolver {
     // ===== passive STUB steps (no triggering action) ===========================
 
     private static GameState resolveProduction(GameState s, StepContext c) {
-        return s; // TODO(E1-13): production, upkeep, population, deficit attrition.
+        // E1-06: production, upkeep, deficit attrition, population dynamics. Net
+        // resource flow is credited/escrowed into the ledger (settled in the single
+        // authoritative pass); structural (population, ship) changes apply here.
+        return EconomyResolution.resolve(s, c.profile(), c.ledger());
     }
 
     private static GameState resolveInfluence(GameState s, StepContext c) {

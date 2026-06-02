@@ -130,7 +130,7 @@ public final class Resolver {
             case MOVEMENT -> resolveActionDriven(state, slice, ctx);
             case COMBAT -> resolveActionDriven(state, slice, ctx);
             case INTERDICTION -> resolveActionDriven(state, slice, ctx);
-            case DEVELOPMENT -> resolveActionDriven(state, slice, ctx);
+            case DEVELOPMENT -> resolveDevelopment(state, slice, ctx);
             case COLONISATION -> resolveActionDriven(state, slice, ctx);
             case MARKET -> resolveMarket(state, slice, ctx);
             case PRODUCTION -> resolveProduction(state, ctx);
@@ -152,6 +152,22 @@ public final class Resolver {
                                            StepContext ctx) {
         GameState afterActions = resolveActionDriven(state, slice, ctx);
         return MarketResolution.resolve(afterActions, ctx.profile(), ctx.ledger());
+    }
+
+    /**
+     * The DEVELOPMENT step (E1-08). First folds the Build/Research/Terraform action
+     * slice ("begin" phase: queue a building, start a tech, start a terraform - each
+     * escrowing its one-off cost through the tick-wide ledger), then runs the passive
+     * per-tick progress sweep ("advance" phase) over every faction so in-flight
+     * construction, research and terraforming tick forward and complete on schedule.
+     * The begins precede the advance so a freshly-queued item does not also advance in
+     * the same tick it was started - its first progress tick is the next tick, exactly
+     * as the build-time/research-time contracts read.
+     */
+    private static GameState resolveDevelopment(GameState state, List<SubmittedAction> slice,
+                                                StepContext ctx) {
+        GameState afterActions = resolveActionDriven(state, slice, ctx);
+        return DevelopmentResolution.advance(afterActions, ctx.profile());
     }
 
     /**
@@ -288,16 +304,35 @@ public final class Resolver {
         return s; // TODO(E1-11): seeded shipment steal.
     }
 
+    /**
+     * E1-08: queue construction. Delegates to {@link DevelopmentResolution#beginBuild},
+     * which places the UNDER_CONSTRUCTION building and escrows its Minerals(+Tech)
+     * cost through the ledger (never a direct Faction debit). The building advances to
+     * ACTIVE over its configured build time in the DEVELOPMENT advance sweep.
+     */
     private static GameState stubBuild(GameState s, FactionId a, Action.Build x, StepContext c) {
-        return s; // TODO(E1-06): queue construction; escrow Minerals(+Tech) via ledger.
+        return DevelopmentResolution.beginBuild(s, a, x, c.profile(), c.ledger());
     }
 
+    /**
+     * E1-08: begin research. Delegates to {@link DevelopmentResolution#beginResearch},
+     * which marks the (DAG-prerequisite-satisfied) tech RESEARCHING and escrows its
+     * Tech cost through the ledger. The node unlocks over its configured research time
+     * in the DEVELOPMENT advance sweep, applying its multipliers/unlocks thereafter.
+     */
     private static GameState stubResearch(GameState s, FactionId a, Action.Research x, StepContext c) {
-        return s; // TODO(E1-06): begin research; escrow Tech cost via ledger.
+        return DevelopmentResolution.beginResearch(s, a, x, c.profile(), c.ledger());
     }
 
+    /**
+     * E1-08: begin terraforming. Delegates to {@link DevelopmentResolution#beginTerraform},
+     * which starts a biome step on the planet idle active Terraformer. The biome
+     * advances one rung toward habitable over the configured terraformerStep ticks in
+     * the DEVELOPMENT advance sweep; the Terraformer sustained Energy upkeep is charged
+     * by the economy step each tick it runs.
+     */
     private static GameState stubTerraform(GameState s, FactionId a, Action.Terraform x, StepContext c) {
-        return s; // TODO(E1-06): advance terraforming a step; sustained Energy upkeep.
+        return DevelopmentResolution.beginTerraform(s, a, x, c.profile());
     }
 
     private static GameState stubBuildFleet(GameState s, FactionId a, Action.BuildFleet x, StepContext c) {

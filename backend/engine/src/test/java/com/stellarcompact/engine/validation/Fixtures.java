@@ -175,10 +175,11 @@ final class Fixtures {
                 new BalanceProfile.Market("priceTimePriority", 0.5, "ENERGY"),
                 new BalanceProfile.Construction(
                         Map.of("mine", 3),
-                        Map.of("mine", new BalanceProfile.ResourceBundle(0, 50, 0, 0, 0))),
+                        Map.of("mine", new BalanceProfile.ResourceBundle(0, 50, 0, 0, 0)),
+                        Map.of("toxic", "arid")),
                 new BalanceProfile.Combat(Map.of("scout", 1.0), List.of(0.8, 1.2), 0.2, 0.3, 0.1),
                 new BalanceProfile.Tech(Map.of("warpDrive", 100.0), Map.of("warpDrive", 5),
-                        Map.of("warpDrive", 1.5)),
+                        Map.of("warpDrive", 1.5), Map.of(), Map.of()),
                 new BalanceProfile.Diplomacy(
                         new BalanceProfile.Reputation(1.0, 1.0, 1.0, 1.0), Map.of()),
                 new BalanceProfile.Victory(

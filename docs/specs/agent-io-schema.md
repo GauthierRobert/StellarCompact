@@ -100,3 +100,55 @@ The `Action` sealed type closes the *shape* of agent input (E1-02). The followin
 ## 6. Versioning
 
 The schema is versioned (`schemaVersion`). Adding an action variant is a minor version; agents and validators must handle unknown future variants by ignoring/holding rather than crashing.
+
+## 7. The `Sovereign` contract + `WorldView` boundary type (E3-01)
+
+A **Sovereign** is the orchestrator's view of any agent — LLM-backed (E4) or scripted (E3-01 `ScriptedSovereign`). It is a single, provider-neutral function:
+
+```
+Sovereign : WorldView -> AgentResponse        // {messages[], actions[]}
+```
+
+The Java contract is a plain interface (no Spring / Spring AI types — provider neutrality, principle 4):
+
+```
+interface Sovereign {
+    FactionId factionId();                     // which seat this brain plays
+    AgentResponse decide(WorldView view);      // perception -> messages + actions
+}
+```
+
+`decide` maps one tick's `WorldView` to an `AgentResponse`. It must never throw on a well-formed `WorldView`; an agent with nothing useful to do returns a single `Hold` action and no messages. The LLM-backed Sovereign (E4) and the `ScriptedSovereign` bot (E3-01, for tests + empty seats) implement the same interface; the orchestrator calls them identically inside the per-phase `StructuredTaskScope`.
+
+### 7a. `WorldView` shape (minimal, stable, forward-compatible)
+
+`WorldView` is the per-faction perception the Sovereign sees. **This card (E3-01) fixes the interface-boundary shape only.** The authoritative server-side **fog-of-war filter that builds a `WorldView` from `GameState` is card E3-02** and is out of scope here; E3-01 ships only a clearly-marked test-only "full-state projection for one faction" stand-in so the bot can be exercised.
+
+The shape mirrors §1, kept token-compact and additive (new fields append; consumers ignore unknown fields):
+
+```
+WorldView
+  tick               : long
+  self               : SelfView { id, name, reputation, stockpiles{energy,minerals,food,tech,influence}, techKnown[] }
+  ownSystems[]       : SystemView { id, name, owned:true, ownedPlanets[]{ id, slotsTotal, freeSlots, hasShipyard }, hasShipyard }
+  ownFleets[]        : FleetView  { id, location?, enRoute:boolean, stance, totalShips }
+  neighbours[]       : NeighbourView { systemId, owner? (fog: ownership only, present iff revealed), roughStrength, lastSeenTick }
+  treaties[]         : TreatyView { id, type, parties[], status }
+  reputations[]      : RepEntry  { factionId, reputation }          // public ledger
+  pendingOffers[]    : OfferView { id, from, expiresTick }          // offers addressed to me
+  events[]           : EventView { type, tick }                     // public events since last tick
+  inbox[]            : InboxMessage { from, text, tick }            // messages received
+```
+
+Design rules carried from §1: own state full; neighbours **fog-limited to ownership + rough strength only** (no hidden enemy state); compact (small lists, top-of-book elsewhere). The type is a deeply-immutable record graph so a `WorldView` handed to a (possibly slow, possibly remote) Sovereign cannot be mutated under the orchestrator.
+
+### 7b. Scripted bot (`ScriptedSovereign`) behaviour
+
+Deterministic, legible heuristics for tests and empty seats — **no LLM, no Spring, no randomness, no wall-clock**. Same `WorldView` ⇒ same `AgentResponse`, every run. To avoid map/set iteration-order nondeterminism it sorts candidate ids before choosing. Priority ladder (first applicable wins; all emitted actions are shape-valid and target only actor-knowable, owned assets so they pass `ActionValidator`):
+
+1. **Build economy** — on an owned planet with a free slot, queue a building it can afford (lowest planet id, lowest free slot, first affordable building type in a fixed order).
+2. **Colonize** — if it has a fleet and a reachable neutral (unowned) neighbour planet, colonize it. *(Gated until E3-02 surfaces neutral-planet detail; conservative/off by default this card.)*
+3. **Explore** — if it has an idle fleet and an unexplored/neutral neighbour system, explore it.
+4. **Hold** — otherwise emit the explicit no-op.
+
+The bot emits at most one primary action per tick (plus `Hold` when idle), keeping it simple and its output trivially replayable.

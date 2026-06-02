@@ -175,15 +175,23 @@ class EconomyResolutionTest {
 
     @Test
     void idleAndUnderConstructionBuildingsNeitherProduceNorConsume() {
+        // MINE at progress 0 (buildTime 3): the E1-08 development sweep advances it to
+        // 1, still UNDER_CONSTRUCTION, so it neither produces nor consumes this tick;
+        // the IDLE farm likewise contributes nothing.
         Planet p = planet(Biome.TERRAN, 0, List.of(
                 new Building(0, BuildingType.FARM, BuildingStatus.IDLE, 0),
-                new Building(1, BuildingType.MINE, BuildingStatus.UNDER_CONSTRUCTION, 2)));
+                new Building(1, BuildingType.MINE, BuildingStatus.UNDER_CONSTRUCTION, 0)));
         ResourceBundle stock = new ResourceBundle(100, 100, 100, 100, 100);
         GameState after = resolve(stateWith(stock, p, List.of()));
         ResourceBundle s = alphaOf(after).stockpiles();
         assertEquals(100.0, s.energy(), 1e-9);
         assertEquals(100.0, s.minerals(), 1e-9);
         assertEquals(100.0, s.food(), 1e-9);
+        // And the building is still under construction (advanced 0 -> 1, not yet ACTIVE).
+        Building mine = planetOf(after).buildings().stream()
+                .filter(b -> b.type() == BuildingType.MINE).findFirst().orElseThrow();
+        assertEquals(BuildingStatus.UNDER_CONSTRUCTION, mine.status());
+        assertEquals(1, mine.progress());
     }
 
     // ---- determinism ---------------------------------------------------------

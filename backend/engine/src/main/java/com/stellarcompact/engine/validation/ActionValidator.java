@@ -96,7 +96,7 @@ public final class ActionValidator {
             case Action.Build a -> validateBuild(state, actor, a, profile);
             case Action.Research a -> validateResearch(state, actor, a, profile);
             case Action.Terraform a -> validateTerraform(state, actor, a);
-            case Action.BuildFleet a -> validateBuildFleet(state, actor, a);
+            case Action.BuildFleet a -> validateBuildFleet(state, actor, a, profile);
             case Action.MoveFleet a -> validateMoveFleet(state, actor, a);
             case Action.EstablishRoute a -> validateEstablishRoute(state, actor, a);
             case Action.SendMessage a -> validateSendMessage(state, actor, a);
@@ -185,17 +185,23 @@ public final class ActionValidator {
                     "Slot " + a.slot() + " on planet " + a.planet().value()
                             + " is already occupied.");
         }
+        Faction builder = state.factions().get(actor);
         ResourceBundle cost = buildCost(profile, a.buildingType());
         if (cost != null) {
-            Faction f = state.factions().get(actor);
-            if (!f.stockpiles().canAfford(cost)) {
+            if (!builder.stockpiles().canAfford(cost)) {
                 return ValidationResult.reject(RejectionReason.INSUFFICIENT_RESOURCES,
                         "Insufficient resources to build " + a.buildingType()
                                 + "; need " + describe(cost) + ".");
             }
         }
-        // TODO(E1-06/E1-07): TECH_PREREQ_MISSING for Shipyard/Market once the
-        // building-to-required-tech mapping is expressed in the profile/tech DAG.
+        // E1-08: tech-gated buildings (e.g. Market hub, Monument) need their gating
+        // tech UNLOCKED; the gate map lives in tech.unlocks (config), not in code.
+        String capability = a.buildingType().configKey();
+        if (!capabilityUnlocked(builder, capability, profile)) {
+            return ValidationResult.reject(RejectionReason.TECH_PREREQ_MISSING,
+                    "Building " + a.buildingType() + " requires unlocking "
+                            + gatingTechName(capability, profile) + " first.");
+        }
         return ValidationResult.valid();
     }
 
@@ -222,8 +228,14 @@ public final class ActionValidator {
                                 + "; need " + techCost + " Tech.");
             }
         }
-        // TODO(E1-06): TECH_PREREQ_MISSING - prerequisite edges of the tech DAG are
-        // not yet expressed (only a flat cost map). Enforce once the DAG exists.
+        // E1-08: enforce the tech DAG prerequisite edges - every prerequisite of the
+        // node must be UNLOCKED before research may begin (game-design 03 Research/06).
+        if (!techPrerequisitesMet(f, a.techId().value(), profile)) {
+            return ValidationResult.reject(RejectionReason.TECH_PREREQ_MISSING,
+                    "Cannot research " + a.techId().value()
+                            + " yet; unlock its prerequisites first: "
+                            + missingPrereqs(f, a.techId().value(), profile) + ".");
+        }
         return ValidationResult.valid();
     }
 
@@ -253,7 +265,7 @@ public final class ActionValidator {
     }
 
     private static ValidationResult validateBuildFleet(GameState state, FactionId actor,
-                                                       Action.BuildFleet a) {
+                                                       Action.BuildFleet a, BalanceProfile profile) {
         ActiveSystem host = state.systems().get(a.system());
         if (host == null) {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
@@ -270,6 +282,14 @@ public final class ActionValidator {
         if (!hasShipyard) {
             return ValidationResult.reject(RejectionReason.MALFORMED,
                     "System " + a.system().value() + " has no active Shipyard to build ships.");
+        }
+        // E1-08: ship tiers are gated by doctrine techs (corvette/cruiser/capital);
+        // the gating map lives in tech.unlocks (config). An ungated spec is buildable.
+        Faction shipwright = state.factions().get(actor);
+        if (!capabilityUnlocked(shipwright, a.shipSpec(), profile)) {
+            return ValidationResult.reject(RejectionReason.TECH_PREREQ_MISSING,
+                    "Ship tier " + a.shipSpec() + " requires unlocking "
+                            + gatingTechName(a.shipSpec(), profile) + " first.");
         }
         // TODO(E1-07): per-ship Minerals+Tech cost and population-to-crew checks need
         // a ship-spec index in the profile (shipSpec -> cost/crew).
@@ -724,6 +744,71 @@ public final class ActionValidator {
             }
         }
         return Optional.empty();
+    }
+
+    // ===== tech DAG gate (E1-08) ==============================================
+
+    /**
+     * @return {@code true} iff every prerequisite tech of {@code techKey} (per the
+     * configured {@code tech.prereqs} DAG edges) is {@code UNLOCKED} for {@code f}. A
+     * node with no configured prerequisites is a root and is always satisfied. The
+     * tree shape is config (rule 6); this method hardcodes no edges.
+     */
+    private static boolean techPrerequisitesMet(Faction f, String techKey, BalanceProfile profile) {
+        List<String> prereqs = profile.tech().prereqs().get(techKey);
+        if (prereqs == null || prereqs.isEmpty()) {
+            return true;
+        }
+        for (String required : prereqs) {
+            if (!isUnlocked(f, required)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Human-readable list of the not-yet-unlocked prerequisites, for the re-prompt. */
+    private static String missingPrereqs(Faction f, String techKey, BalanceProfile profile) {
+        List<String> prereqs = profile.tech().prereqs().get(techKey);
+        if (prereqs == null) {
+            return "(none)";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String required : prereqs) {
+            if (!isUnlocked(f, required)) {
+                if (sb.length() > 0) {
+                    sb.append(", ");
+                }
+                sb.append(required);
+            }
+        }
+        return sb.length() == 0 ? "(none)" : sb.toString();
+    }
+
+    /**
+     * @return {@code true} iff {@code f} may use {@code capability} (a building or
+     * ship-spec configKey): either no tech gates it in {@code tech.unlocks}, or its
+     * gating tech is {@code UNLOCKED}.
+     */
+    private static boolean capabilityUnlocked(Faction f, String capability, BalanceProfile profile) {
+        String gate = gatingTechName(capability, profile);
+        return gate == null || isUnlocked(f, gate);
+    }
+
+    /** @return the tech that gates {@code capability} per {@code tech.unlocks}, or null if ungated. */
+    private static String gatingTechName(String capability, BalanceProfile profile) {
+        for (java.util.Map.Entry<String, List<String>> e : profile.tech().unlocks().entrySet()) {
+            if (e.getValue().contains(capability)) {
+                return e.getKey();
+            }
+        }
+        return null;
+    }
+
+    /** @return {@code true} iff faction {@code f} has the named tech UNLOCKED. */
+    private static boolean isUnlocked(Faction f, String techKey) {
+        TechProgress tp = f.techProgress().get(new com.stellarcompact.engine.state.TechId(techKey));
+        return tp != null && tp.status() == TechStatus.UNLOCKED;
     }
 
     private static boolean isEmptyBundle(ResourceBundle b) {

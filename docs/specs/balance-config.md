@@ -18,8 +18,9 @@ balanceProfile:
     routeInfluencePerVolume: ..
     currency: ENERGY            # PhysicalResource a market order price is denominated in (E1-07)
   construction:
-    buildTimes: { mine:.., shipyard:.., terraformerStep:.. }
+    buildTimes: { mine:.., shipyard:.., terraformerStep:.. }   # terraformerStep = ticks per terraform biome step (E1-08)
     costs: { ... }
+    terraformChain: { toxic: arid, arid: terran, ... }          # biome -> next biome "toward habitable" (E1-08); a biome absent from the map is habitable / un-terraformable
   combat:
     tierMultipliers: { scout:.., corvette:.., cruiser:.., capital:.. }
     varianceBand: [lo, hi]
@@ -30,6 +31,8 @@ balanceProfile:
     costs: { ... }
     times: { ... }
     multipliers: { ... }
+    prereqs: { techId: [prerequisiteTechId, ...], ... }   # tech DAG edges (E1-08); a node absent / empty is a root. Research is gated until every prereq is UNLOCKED (TECH_PREREQ_MISSING)
+    unlocks: { techId: [capabilityKey, ...], ... }        # what a tech gates once UNLOCKED: ship-spec or building configKeys (E1-08). A capability not named by any tech is ungated
   diplomacy:
     reputation:
       gainHonourTreaty: ..

@@ -52,4 +52,13 @@ public record Faction(
     public Faction withStockpiles(ResourceBundle newStockpiles) {
         return new Faction(id, name, reputation, newStockpiles, techProgress);
     }
+
+    /**
+     * Copy-on-write: a new Faction identical to this one but with the given tech
+     * DAG view. The Research step (E1-08) inserts/advances a {@link TechProgress}
+     * node every tick a faction researches; this keeps the call site immutable.
+     */
+    public Faction withTechProgress(Map<TechId, TechProgress> newTechProgress) {
+        return new Faction(id, name, reputation, stockpiles, newTechProgress);
+    }
 }

@@ -176,7 +176,7 @@ client/agent-visible read (flagged 🔒 below).
 - **🔒 Security prereq (from E1-04 review, spec §4a):** the directed-offer record must add an **addressee** + **`expiresTick`**; then extend `ActionValidator` so `AcceptTrade`/`DeclineTrade` reject offers not addressed to the actor and expired offers (`OFFER_EXPIRED`). E1-04 only checks existence/proposer-identity today.
 
 ### E1-08 · Construction, research (tech DAG), terraform
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer
+- **Status:** ☐ To Be verified · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/06-technology.md`, `docs/game-design/02-economy.md` §6
 - **Do:** Build queues with build-time ticks; tech as a **DAG** with prereqs, costs, times, and applied
   multipliers/unlocks; terraform stepping biomes toward habitable with Energy upkeep. Slot limits enforced.
@@ -272,7 +272,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** roster reproducible per seed; biome distribution plausible; slot counts respect planet size.
 
 ### E2-03 · Lane graph
-- **Status:** ☐ Todo · **Module:** galaxy · **Depends on:** E2-01 · **Delegate to:** game-engine-developer
+- **Status:** ☐ To Be verified  · **Module:** galaxy · **Depends on:** E2-01 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/01-world-and-map.md` §3
 - **Do:** Build **natural lanes** (edges by proximity) with **length = travel cost in ticks** from real distance.
   Deterministic; supports pathfinding for E1-09.
@@ -297,7 +297,7 @@ client/agent-visible read (flagged 🔒 below).
 # E3 — Sovereign contract, scripted bot, headless runner  *(Phase 1)* — read `.claude/skills/agent-sovereign`
 
 ### E3-01 · Sovereign interface + scripted bot
-- **Status:** ☐ Todo · **Module:** engine/orchestrator · **Depends on:** E1-02 · **Delegate to:** agent-runtime-developer
+- **Status:** ☐ To Be verified  · **Module:** engine/orchestrator · **Depends on:** E1-02 · **Delegate to:** agent-runtime-developer
 - **Read first:** `.claude/skills/agent-sovereign`, `docs/architecture/03-agent-runtime.md` §2
 - **Do:** Define `Sovereign`: `WorldView → {messages[], actions[]}`. Implement a **scripted/bot** Sovereign (no LLM)
   for tests and empty seats — deterministic, simple heuristics.

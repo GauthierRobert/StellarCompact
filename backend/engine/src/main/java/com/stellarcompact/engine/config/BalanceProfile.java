@@ -118,14 +118,36 @@ public record BalanceProfile(
     ) {
     }
 
-    /** Build times (ticks) and resource costs per building / terraform step. */
+    /**
+     * Build times (ticks) and resource costs per building / terraform step.
+     *
+     * <ul>
+     *   <li>{@code buildTimes} - ticks a queued building (keyed by its
+     *       {@link com.stellarcompact.engine.state.BuildingType#configKey()}) takes
+     *       to finish; also carries {@code "terraformerStep"}, the ticks one
+     *       Terraform biome step takes (E1-08).</li>
+     *   <li>{@code costs} - the Minerals(+Tech) cost to queue each building, keyed
+     *       by building configKey.</li>
+     *   <li>{@code terraformChain} - the biome-stepping DAG a Terraformer walks
+     *       "toward habitable" (game-design 03 Terraform: Toxic-&gt;Arid-&gt;Terran...),
+     *       keyed by a biome's {@link com.stellarcompact.engine.state.Biome#configKey()}
+     *       to the configKey of the biome it advances to. A biome absent from this
+     *       map is already habitable (no further step) and cannot be terraformed.
+     *       Keeping the chain in config (rule 6) means the resolver hardcodes no
+     *       biome ordering.</li>
+     * </ul>
+     */
     public record Construction(
             Map<String, Integer> buildTimes,
-            Map<String, ResourceBundle> costs
+            Map<String, ResourceBundle> costs,
+            Map<String, String> terraformChain
     ) {
         public Construction {
             buildTimes = Map.copyOf(buildTimes);
             costs = Map.copyOf(costs);
+            // Additive in E1-08; an older/partial profile that omits the chain simply
+            // has no terraform steps (defensive default, forward-compatible).
+            terraformChain = terraformChain == null ? Map.of() : Map.copyOf(terraformChain);
         }
     }
 
@@ -147,16 +169,55 @@ public record BalanceProfile(
         }
     }
 
-    /** Tech DAG costs (Tech resource), times (ticks) and applied multipliers. */
+    /**
+     * Tech DAG costs (Tech resource), times (ticks), applied multipliers and the
+     * prerequisite / unlock edges that make it a directed acyclic graph (E1-08).
+     *
+     * <ul>
+     *   <li>{@code costs} - Tech resource to research each node, keyed by tech id.</li>
+     *   <li>{@code times} - ticks each node takes once research begins.</li>
+     *   <li>{@code multipliers} - the production multiplier an unlocked node applies
+     *       (consumed by {@code EconomyResolution}); a node with no passive
+     *       multiplier is simply absent.</li>
+     *   <li>{@code prereqs} - the DAG edges: a tech id to the list of tech ids that
+     *       must be {@code UNLOCKED} before it can be researched. A node absent from
+     *       this map (or mapped to an empty list) is a root with no prerequisites.
+     *       This is the prerequisite gate the validator/resolver enforce; keeping it
+     *       in config (rule 6) means the tree shape is tunable, not hardcoded.</li>
+     *   <li>{@code unlocks} - what each tech node gates once unlocked: the list of
+     *       config keys (ship-spec or building configKeys) that become available to
+     *       the faction. The inverse index (capability key to the tech that gates it)
+     *       lets the validator reject a gated Build/BuildFleet whose required tech is
+     *       not yet unlocked ({@code TECH_PREREQ_MISSING}). A capability not named by
+     *       any tech is ungated (available from the start).</li>
+     * </ul>
+     */
     public record Tech(
             Map<String, Double> costs,
             Map<String, Integer> times,
-            Map<String, Double> multipliers
+            Map<String, Double> multipliers,
+            Map<String, List<String>> prereqs,
+            Map<String, List<String>> unlocks
     ) {
         public Tech {
             costs = Map.copyOf(costs);
             times = Map.copyOf(times);
             multipliers = Map.copyOf(multipliers);
+            // prereqs/unlocks are additive in E1-08; a profile that omits them has a
+            // flat (rootless) tree with nothing gated (defensive, forward-compatible).
+            prereqs = copyOfLists(prereqs);
+            unlocks = copyOfLists(unlocks);
+        }
+
+        private static Map<String, List<String>> copyOfLists(Map<String, List<String>> in) {
+            if (in == null) {
+                return Map.of();
+            }
+            Map<String, List<String>> out = new java.util.LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> e : in.entrySet()) {
+                out.put(e.getKey(), List.copyOf(e.getValue()));
+            }
+            return Map.copyOf(out);
         }
     }
 

@@ -69,6 +69,13 @@
       "defensePlatform": { "energy": 0.0, "minerals": 60.0,  "food": 0.0, "tech": 10.0, "influence": 0.0 },
       "monument":        { "energy": 0.0, "minerals": 150.0, "food": 0.0, "tech": 40.0, "influence": 0.0 },
       "terraformer":     { "energy": 0.0, "minerals": 80.0,  "food": 0.0, "tech": 30.0, "influence": 0.0 }
+    },
+    "terraformChain": {
+      "toxic": "arid",
+      "arid": "terran",
+      "volcanic": "arid",
+      "frozen": "terran",
+      "terran": "oceanic"
     }
   },
   "combat": {
@@ -121,6 +128,27 @@
       "targetingSystems": 1.2,
       "shielding": 1.2,
       "diplomaticCorps": 1.25
+    },
+    "prereqs": {
+      "improvedExtraction": [],
+      "hydroponics": [],
+      "marketNetworks": [],
+      "colonialLogistics": [],
+      "terraformingI": ["improvedExtraction"],
+      "corvetteDoctrine": [],
+      "cruiserDoctrine": ["corvetteDoctrine"],
+      "capitalDoctrine": ["cruiserDoctrine"],
+      "targetingSystems": ["corvetteDoctrine"],
+      "shielding": ["corvetteDoctrine"],
+      "diplomaticCorps": [],
+      "monumentalWorks": ["marketNetworks"]
+    },
+    "unlocks": {
+      "corvetteDoctrine": ["corvette"],
+      "cruiserDoctrine": ["cruiser"],
+      "capitalDoctrine": ["capital"],
+      "marketNetworks": ["marketHub"],
+      "monumentalWorks": ["monument"]
     }
   },
   "diplomacy": {

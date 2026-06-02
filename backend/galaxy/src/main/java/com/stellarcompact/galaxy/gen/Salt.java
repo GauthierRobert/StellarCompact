@@ -40,7 +40,17 @@ enum Salt {
     /** A planet's physical size class roll (drives its slot count). */
     PLANET_SIZE,
     /** A planet's slot-count roll within the band its size permits. */
-    SLOT_COUNT;
+    SLOT_COUNT,
+
+    // --- E2-03 lane graph deterministic tiebreak (append-only) ---
+
+    /**
+     * Tiebreak key for the lane graph: when two candidate lanes are equal in
+     * distance (neighbour selection) or equal in bridging cost (connectivity
+     * pass), this seeds a deterministic, seed-stable ordering so the generated
+     * graph is reproducible without relying on float-equality or insertion order.
+     */
+    LANE_TIEBREAK;
 
     /** @return the stable salt value mixed into the hash. */
     long value() {

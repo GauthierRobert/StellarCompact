@@ -25,6 +25,35 @@ event_log(id, game_id, tick, type, payload_json)            -- append-only; powe
 - Promotion: colonising a procedural star inserts an `active_system` (+ planet/building rows).
 - Demotion: an abandoned active system can be deleted, reverting to pure procedural scenery.
 
+### Natural lane graph (procedural, NOT stored) — E2-03
+
+The **natural lanes** of game-design 01 §3 (the static travel skeleton) are part of
+the procedural catalog: a pure function of `(seed, region)`, regenerated on demand,
+never persisted. This is distinct from the `route` table above, which is the
+faction-*activated* trade/military layer (game-design 01 §3 "established routes").
+
+- **Input:** the set of stars in a bounded **playable region** (E2-01 cells), plus the
+  game seed. The galaxy module builds the graph; it does not iterate the whole catalog
+  (principle 3).
+- **Edges (lanes):** undirected, built by **proximity** — each star links to its
+  nearest neighbours (k-nearest within a max radius). Determinism: neighbour selection
+  is by distance then a `SeedHash`-derived deterministic tiebreak, so equal-distance
+  ties resolve identically per seed.
+- **Connectivity guarantee:** proximity edges alone can leave isolated stars/clusters.
+  After building them we add **MST-style bridging lanes** (a deterministic minimum
+  spanning forest over the components, shortest cross-component link first, ties broken
+  by the same seeded order) so the region's graph is **connected** — pathfinding
+  (E1-09) always has a path between any two region systems.
+- **Lane length = travel ticks:** derived from the Euclidean distance between the two
+  star coords via a configured `LANE_TICKS_PER_UNIT` factor, rounded deterministically,
+  **minimum 1 tick**. Length is monotonic with distance.
+- **Consumer (E1-09):** the graph exposes immutable adjacency lookup (`star id ->
+  lanes`) and a separated, deterministic shortest-path helper (Dijkstra by summed lane
+  ticks) so fleet travel ETAs and interception are reproducible.
+- **Tunables** (`GalaxyConstants`, part of the determinism contract — not the balance
+  profile, since they shape the fixed map skeleton like `CELL_SIZE`): max neighbours
+  per star, max lane radius, ticks-per-distance-unit.
+
 ## Object store / CDN (tiles)
 - Precomputed/cached tile payloads keyed by (seed, level, x, y, schemaVersion).
 - Immutable for scenery; regenerable from seed at any time (cache is an optimisation, not a source of truth).

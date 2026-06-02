@@ -132,4 +132,38 @@ public final class GalaxyConstants {
      * contract); tuning them changes generated rosters.
      */
     public static final int[] BIOME_WEIGHTS = {4, 6, 16, 16, 14, 16, 18, 10};
+
+    // --- E2-03 natural lane graph (travel skeleton, game-design 01 section 3) ---
+
+    /**
+     * Maximum natural lanes per star (k in the k-nearest-neighbour proximity
+     * build). Bounds graph degree so the map reads as a sparse travel skeleton
+     * (a handful of jump options per system, like the PoC route web) rather than
+     * a dense mesh. A generation constant (part of the determinism contract,
+     * like {@link #CELL_SIZE}); changing it changes the generated graph.
+     */
+    public static final int LANE_MAX_NEIGHBOURS = 4;
+
+    /**
+     * Maximum length of a proximity lane (galaxy units). Stars farther apart than
+     * this are not linked by a natural lane; sparser frontier regions are bridged
+     * deterministically by the connectivity (MST) pass instead. Chosen relative to
+     * {@link #CELL_SIZE} so typical neighbours within a few cells connect while
+     * far field stars do not spawn implausibly long lanes.
+     */
+    public static final double LANE_MAX_RADIUS = 140.0;
+
+    /**
+     * Travel cost factor: ticks per galaxy distance unit. A lane's length in ticks
+     * is {@code round(distance * LANE_TICKS_PER_UNIT)}, floored to a minimum of
+     * {@link #LANE_MIN_TICKS}. Lane length is monotonic with real distance
+     * (game-design 01 section 3: "length (travel cost in ticks) derived from real
+     * distance"). A generation/travel tunable kept here with the other map-skeleton
+     * constants, not in the balance profile, because it is part of the reproducible
+     * graph contract E1-09 pathfinding depends on.
+     */
+    public static final double LANE_TICKS_PER_UNIT = 0.05;
+
+    /** Floor on a lane's travel cost: no lane is instantaneous. */
+    public static final int LANE_MIN_TICKS = 1;
 }

@@ -80,6 +80,30 @@ public record BalanceProfile(
                 movement, tech, diplomacy, victory, tick, HomePlacement.defaults());
     }
 
+    /**
+     * Backwards-compatible constructor predating both the E1-09 {@code movement} and
+     * E2-04 {@code homePlacement} blocks: delegates to the canonical constructor with
+     * both inert defaults ({@link Movement#defaults()}, {@link HomePlacement#defaults()}).
+     * Lets pre-E1-09 fixtures that build a profile positionally (through {@code tick},
+     * without a movement block) keep compiling; combat/economy fixtures that do not care
+     * about travel get interception-off defaults.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick) {
+        this(name, version, resources, population, market, construction, combat,
+                Movement.defaults(), tech, diplomacy, victory, tick, HomePlacement.defaults());
+    }
+
     /** Per-tick resource economy. */
     public record Resources(
             Map<String, ResourceBundle> biomeYields,
@@ -190,20 +214,90 @@ public record BalanceProfile(
     }
 
     /**
-     * Combat tunables. varianceBand is [lo, hi] bounds of the seeded roll;
-     * occupationLoyaltyPenalty is the loyalty lost on a freshly captured system;
-     * warExhaustionPerLoss is exhaustion accrued per ship lost.
+     * Combat tunables (game-design 05 section 2; board card E1-10).
+     *
+     * <p>The power model is
+     * {@code attackerPower = Sum(shipAttack x tierMult) x stanceAttackMod} and
+     * {@code defenderPower = Sum(shipDefense x tierMult) x stanceDefenseMod x
+     * terrainDefenseMod x defensePlatformBonus}; the {@code terrainDefenseMod} and
+     * {@code defensePlatformBonus} apply only to a defended <em>system</em> assault,
+     * not to a fleet-vs-fleet interception engagement.
+     *
+     * <ul>
+     *   <li>{@code tierMultipliers} - per ship-spec tier/tech multiplier (a Capital
+     *       outweighs a Corvette); a spec absent from the map contributes the neutral
+     *       {@code 1.0}. A {@code 0.0} (e.g. freighter) means no combat value.</li>
+     *   <li>{@code shipAttack} / {@code shipDefense} - per ship-spec base attack /
+     *       defence strength; a spec absent from either map contributes {@code 0} on
+     *       that axis (a non-combatant). Kept separate from {@code tierMultipliers} so
+     *       a spec can be strong on one axis and weak on the other.</li>
+     *   <li>{@code stanceAttackMod} / {@code stanceDefenseMod} - per
+     *       {@link com.stellarcompact.engine.state.FleetStance} name (e.g.
+     *       {@code "AGGRESSIVE"}) attack / defence multiplier; a stance absent from a
+     *       map is the neutral {@code 1.0}.</li>
+     *   <li>{@code terrainDefenseMod} - flat defender multiplier for a system assault
+     *       (the garrison's home-ground advantage); {@code 1.0} is none. Does not apply
+     *       to fleet-vs-fleet interception battles.</li>
+     *   <li>{@code varianceBand} - {@code [lo, hi]} bounds of the seeded roll applied to
+     *       the attacker (and its complement to the defender) so a stronger force
+     *       usually but not always wins.</li>
+     *   <li>{@code defensePlatformBonus} - defender multiplier when the assaulted system
+     *       has an active {@code defensePlatform} building.</li>
+     *   <li>{@code lossFractionWinner} / {@code lossFractionLoser} - fraction (0..1) of
+     *       a side's ships destroyed when it wins / loses; the loser loses more, but the
+     *       winner takes attrition too (no costless victory).</li>
+     *   <li>{@code occupationLoyaltyPenalty} - loyalty lost (floored at 0) on a freshly
+     *       captured system - the occupation/unrest brake on conquest.</li>
+     *   <li>{@code warExhaustionPerLoss} - exhaustion accrued per ship lost (later cards
+     *       surface it for war termination).</li>
+     * </ul>
      */
     public record Combat(
             Map<String, Double> tierMultipliers,
             List<Double> varianceBand,
             double defensePlatformBonus,
             double occupationLoyaltyPenalty,
-            double warExhaustionPerLoss
+            double warExhaustionPerLoss,
+            Map<String, Double> shipAttack,
+            Map<String, Double> shipDefense,
+            Map<String, Double> stanceAttackMod,
+            Map<String, Double> stanceDefenseMod,
+            double terrainDefenseMod,
+            double lossFractionWinner,
+            double lossFractionLoser
     ) {
         public Combat {
             tierMultipliers = Map.copyOf(tierMultipliers);
             varianceBand = List.copyOf(varianceBand);
+            // E1-10 fields are additive over the original five; an older/partial profile
+            // that omits them gets neutral defaults so it stays loadable and the combat
+            // step degrades gracefully (forward-compatible, like the tech DAG / movement).
+            shipAttack = shipAttack == null ? Map.of() : Map.copyOf(shipAttack);
+            shipDefense = shipDefense == null ? Map.of() : Map.copyOf(shipDefense);
+            stanceAttackMod = stanceAttackMod == null ? Map.of() : Map.copyOf(stanceAttackMod);
+            stanceDefenseMod = stanceDefenseMod == null ? Map.of() : Map.copyOf(stanceDefenseMod);
+            if (terrainDefenseMod <= 0.0) {
+                terrainDefenseMod = 1.0;
+            }
+            // Loss fractions default to a sane proportional split if a legacy profile
+            // omits them (loser annihilated, winner takes no attrition).
+            if (lossFractionLoser <= 0.0) {
+                lossFractionLoser = 1.0;
+            }
+            if (lossFractionWinner < 0.0) {
+                lossFractionWinner = 0.0;
+            }
+        }
+
+        /**
+         * Five-arg constructor preserving the pre-E1-10 shape. Existing callers/tests
+         * keep compiling; the E1-10 power/loss fields take their neutral defaults.
+         */
+        public Combat(Map<String, Double> tierMultipliers, List<Double> varianceBand,
+                      double defensePlatformBonus, double occupationLoyaltyPenalty,
+                      double warExhaustionPerLoss) {
+            this(tierMultipliers, varianceBand, defensePlatformBonus, occupationLoyaltyPenalty,
+                    warExhaustionPerLoss, Map.of(), Map.of(), Map.of(), Map.of(), 1.0, 0.0, 1.0);
         }
     }
 

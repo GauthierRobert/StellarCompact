@@ -21,7 +21,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E1-07** Market order book + escrow (price-time priority) — *deps: E1-05* — game-engine-developer
 - ✅ **E1-08** Construction + tech DAG + terraform — *deps: E1-05* — game-engine-developer
 - ✅ **E1-09** Movement & interception — *deps: E1-05, E2-03* — game-engine-developer
-- ☐ **E1-10** Combat & system assault/capture/unrest — *deps: E1-05, E1-09* — game-engine-developer
+- ✅ **E1-10** Combat & system assault/capture/unrest — *deps: E1-05, E1-09* — game-engine-developer
 - ☐ **E1-11** Blockade & raid effects — *deps: E1-07, E1-09* — game-engine-developer
 - ☐ **E1-12** 🔒 Diplomacy: treaties/reputation/war/tribute — *deps: E1-05* — game-engine-developer
 - ☐ **E1-13** Espionage operations (seeded) — *deps: E1-05* — game-engine-developer
@@ -34,12 +34,12 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E2-01** Procedural star placement (seed-based, spiral density) — *deps: E0-01* — game-engine-developer
 - ✅ **E2-02** System & planet roster generation (biomes) — *deps: E2-01* — game-engine-developer
 - ✅ **E2-03** Lane graph (length = travel ticks) — *deps: E2-01* — game-engine-developer
-- ☐ **E2-04** Home placement (min separation, balanced) — *deps: E2-02, E2-03* — game-balance-designer
+- ✅ **E2-04** Home placement (min separation, balanced) — *deps: E2-02, E2-03* — game-balance-designer
 - ☐ **E2-05** Promotion/demotion boundary (procedural ↔ active) — *deps: E2-02, E1-01* — game-engine-developer
 
 ## E3 — Sovereign contract, scripted bot, headless runner (Phase 1)
 - ✅ **E3-01** Sovereign interface + scripted bot (no LLM) — *deps: E1-02* — agent-runtime-developer
-- ☐ **E3-02** 🔒 WorldView builder + fog-of-war filtering — *deps: E1-01, E3-01* — agent-runtime-developer
+- ✅ **E3-02** 🔒 WorldView builder + fog-of-war filtering — *deps: E1-01, E3-01* — agent-runtime-developer
 - ☐ **E3-03** Headless match runner + determinism replay — *deps: E1-17, E3-01, E3-02* — game-engine-developer
 
 ## E4 — LLM agent runtime + orchestration (Phase 2)

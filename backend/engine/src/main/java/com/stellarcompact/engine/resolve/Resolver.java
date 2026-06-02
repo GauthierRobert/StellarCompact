@@ -206,20 +206,29 @@ public final class Resolver {
     }
 
     /**
-     * The COMBAT step (E1-10, seam wired by E1-09). Folds the {@code Attack} action
-     * slice (still stubbed until E1-10) and is the consumer of the
-     * {@link PendingBattle}s the MOVEMENT step's interception detection produced. The
-     * battles ride in {@code ctx.pendingBattles()}; resolving them - the power
-     * comparison, seeded variance band and proportional losses of game-design 05
-     * section 2 - is E1-10's job and is intentionally NOT done here. This card leaves
-     * the list populated and the seam documented so E1-10 plugs in without moving it;
-     * no fight is resolved on an unvalidated path.
+     * The COMBAT step (E1-10; game-design 05 sections 1-2,6). Two consumers run through
+     * the same {@link CombatResolution} primitives, in a fixed order for determinism:
+     * <ol>
+     *   <li>the forced interception engagements (E1-09) the MOVEMENT step accumulated in
+     *       {@code ctx.pendingBattles()} - resolved first, in their already-deterministic
+     *       order, each seeded from {@code gameSeed XOR tick XOR battleId}; then</li>
+     *   <li>the ordered {@code Attack} action slice - each a fleet-vs-fleet engagement or
+     *       a system assault that captures the system on a win.</li>
+     * </ol>
+     * Power, the seeded variance band, the proportional loss fractions and the occupation
+     * penalty all come from {@code BalanceProfile.Combat} (rule 6). Combat applies its
+     * losses/capture directly to the snapshot (no resource spend, so nothing routes
+     * through the ledger). No fight is ever resolved on an unvalidated path - interception
+     * battles arise only from validated movement, and {@code Attack} actions are
+     * validator-gated (war-state + reachability).
      */
     private static GameState resolveCombat(GameState state, List<SubmittedAction> slice,
                                            StepContext ctx) {
-        // TODO(E1-10): for each ctx.pendingBattles() resolve the engagement seeded from
-        // gameSeed XOR tick XOR battleId; apply proportional losses; capture on assault.
-        return resolveActionDriven(state, slice, ctx);
+        GameState next = state;
+        for (PendingBattle pb : ctx.pendingBattles()) {
+            next = CombatResolution.resolveInterception(next, pb, ctx.seed(), ctx.tick(), ctx.profile());
+        }
+        return CombatResolution.resolve(next, slice, ctx.seed(), ctx.tick(), ctx.profile());
     }
 
     /**
@@ -374,8 +383,15 @@ public final class Resolver {
         return s;
     }
 
+    /**
+     * E1-10: Attack is handled by {@link #resolveCombat} via {@link CombatResolution}
+     * (power model, seeded variance band, proportional losses, system capture), not
+     * through this per-action stub, so this arm is unreachable for the COMBAT step. It
+     * remains only to keep the sealed-{@link Action} switch exhaustive (a new variant
+     * must still break compilation here).
+     */
     private static GameState stubAttack(GameState s, FactionId a, Action.Attack x, StepContext c) {
-        return s; // TODO(E1-10): combat resolution; system capture on assault win.
+        return s;
     }
 
     private static GameState stubBlockade(GameState s, FactionId a, Action.Blockade x, StepContext c) {

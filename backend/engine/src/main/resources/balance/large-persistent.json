@@ -89,7 +89,36 @@
     "varianceBand": [0.35, 0.65],
     "defensePlatformBonus": 1.6,
     "occupationLoyaltyPenalty": 0.6,
-    "warExhaustionPerLoss": 1.0
+    "warExhaustionPerLoss": 1.0,
+    "shipAttack": {
+      "scout": 1.0,
+      "corvette": 3.0,
+      "cruiser": 6.0,
+      "capital": 12.0,
+      "freighter": 0.0
+    },
+    "shipDefense": {
+      "scout": 1.0,
+      "corvette": 3.0,
+      "cruiser": 7.0,
+      "capital": 14.0,
+      "freighter": 1.0
+    },
+    "stanceAttackMod": {
+      "AGGRESSIVE": 1.35,
+      "BALANCED": 1.0,
+      "DEFENSIVE": 0.65,
+      "EVASIVE": 0.5
+    },
+    "stanceDefenseMod": {
+      "AGGRESSIVE": 0.75,
+      "BALANCED": 1.0,
+      "DEFENSIVE": 1.35,
+      "EVASIVE": 1.15
+    },
+    "terrainDefenseMod": 1.3,
+    "lossFractionWinner": 0.3,
+    "lossFractionLoser": 0.8
   },
   "movement": {
     "energyCostPerLaneTick": 0.75,

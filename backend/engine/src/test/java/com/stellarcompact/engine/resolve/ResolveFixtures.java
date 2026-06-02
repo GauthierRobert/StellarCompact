@@ -72,4 +72,30 @@ final class ResolveFixtures {
                         new BalanceProfile.ScoreWeights(1, 1, 1, 1, 1, 1, 1)),
                 new BalanceProfile.Tick(1000, 2, 5000));
     }
+
+    /**
+     * A profile whose combat block is fully populated (E1-10): per-spec attack/defence,
+     * stance modifiers, terrain, defence-platform bonus, a tight variance band and the
+     * proportional loss fractions. Used by the combat resolution tests; every gameplay
+     * number lives here, none in the resolver.
+     */
+    static BalanceProfile combatProfile() {
+        BalanceProfile base = profile();
+        BalanceProfile.Combat combat = new BalanceProfile.Combat(
+                Map.of("scout", 0.5, "corvette", 1.0, "cruiser", 2.5, "capital", 6.0, "freighter", 0.0),
+                List.of(0.4, 0.6),          // varianceBand
+                1.5,                         // defensePlatformBonus
+                0.5,                         // occupationLoyaltyPenalty
+                1.0,                         // warExhaustionPerLoss
+                Map.of("scout", 1.0, "corvette", 3.0, "cruiser", 6.0, "capital", 12.0, "freighter", 0.0),
+                Map.of("scout", 1.0, "corvette", 3.0, "cruiser", 7.0, "capital", 14.0, "freighter", 1.0),
+                Map.of("AGGRESSIVE", 1.3, "BALANCED", 1.0, "DEFENSIVE", 0.7, "EVASIVE", 0.5),
+                Map.of("AGGRESSIVE", 0.8, "BALANCED", 1.0, "DEFENSIVE", 1.3, "EVASIVE", 1.1),
+                1.25,                        // terrainDefenseMod
+                0.25,                        // lossFractionWinner
+                0.75);                       // lossFractionLoser
+        return new BalanceProfile(
+                base.name(), base.version(), base.resources(), base.population(), base.market(),
+                base.construction(), combat, base.tech(), base.diplomacy(), base.victory(), base.tick());
+    }
 }

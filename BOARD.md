@@ -192,7 +192,7 @@ client/agent-visible read (flagged 🔒 below).
 - **🔒 Security prereq (from E1-04 review, spec §4a):** extend `ActionValidator` with the now-deferrable checks — F1 positive **war-state gate** for `Attack`/`Blockade`/`Raid` (peace-but-not-treaty targets must be rejected, not just treaty-bound ones), and F2 **lane adjacency/reachability** (`Explore`/`Colonize`/`MoveFleet` origin=fleet-location + real-lane hops/`EstablishRoute`/fleet-positioned-at-target). The resolver MUST NOT move/fight on an unvalidated path.
 
 ### E1-10 · Combat & system assault
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-05, E1-09 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-05, E1-09 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/05-conflict.md` §§1-2,6
 - **Do:** `attackerPower`/`defenderPower` with tier/tech/stance/terrain/defense-platform mods; **seeded variance band**;
   proportional losses (winner takes attrition too); system assault ⇒ capture (ownership + surviving buildings transfer)
@@ -279,7 +279,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** graph reproducible per seed; connectivity guaranteed for the playable region; lane lengths derived from distance.
 
 ### E2-04 · Home system placement (balanced, seeded)
-- **Status:** ☐ Todo · **Module:** galaxy · **Depends on:** E2-02, E2-03 · **Delegate to:** game-balance-designer
+- **Status:** ✅ Done · **Module:** galaxy · **Depends on:** E2-02, E2-03 · **Delegate to:** game-balance-designer
 - **Read first:** `docs/game-design/01-world-and-map.md` §6
 - **Do:** Place N home systems with **minimum separation** and **balanced local resource potential**; assign starter
   loadout (one cradle world, small stockpile, one scout). Seeded & reproducible.
@@ -304,7 +304,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** interface stable; scripted bot plays a full match headlessly with valid actions; deterministic per seed.
 
 ### E3-02 · WorldView builder + fog-of-war filtering
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E1-01, E3-01 · **Delegate to:** agent-runtime-developer · 🔒
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E1-01, E3-01 · **Delegate to:** agent-runtime-developer · 🔒
 - **Read first:** `docs/architecture/03-agent-runtime.md` §3, `docs/specs/agent-io-schema.md` §1, `docs/game-design/01-world-and-map.md` §4
 - **Do:** Build the compact `WorldView` per faction with **authoritative server-side fog filtering**: own assets full;
   neighbours fog-limited (ownership, rough strength, last-seen); top-of-book markets only; treaties/reputation/offers/

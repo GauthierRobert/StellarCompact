@@ -52,14 +52,43 @@ GET /api/galaxy/{gameId}/overlay?bbox=minX,minY,maxX,maxY&sinceTick=N
 ## Match lifecycle
 
 ```
-POST /api/games                      { size, factionCount, tickIntervalMs, victoryCondition, balanceProfile } → { gameId, gameSeed, status:CREATED }
+POST /api/games                      { seed?, size?, factionCount?, tickIntervalMs?, victoryCondition?, balanceProfile? } → 201 GameSummary { gameId, gameSeed, status:CREATED, tick, balanceProfile, factions[] }
 GET  /api/games/{gameId}             → GameSummary
-POST /api/games/{gameId}/start       → status:RUNNING
-POST /api/games/{gameId}/pause       → status:PAUSED
-POST /api/games/{gameId}/resume      → status:RUNNING
-GET  /api/games/{gameId}/state       → spectator-visible snapshot (fog rules apply per requester)
-GET  /api/games/{gameId}/events?fromTick= → public event log page (replay/spectate)
+POST /api/games/{gameId}/start       → GameSummary status:RUNNING
+POST /api/games/{gameId}/pause       → GameSummary status:PAUSED
+POST /api/games/{gameId}/resume      → GameSummary status:RUNNING
+GET  /api/games/{gameId}/state[?requester=factionId] → fog-applied snapshot per requester
+GET  /api/games/{gameId}/events?fromTick=&limit= → EventsPage (replay/spectate)
+GET  /api/games/{gameId}/leaderboard → LeaderboardResponse { gameId, tick, entries[ {rank, factionId, score} ] }
 ```
+
+Implemented contract (E6-01):
+- **Create** (`POST /api/games`) seeds a small galaxy deterministically and returns `201` with the
+  `GameSummary`. Every field is optional: `seed` (omitted ⇒ service-derived, never wall-clock),
+  `factionCount` (default 2, clamped to `[2,8]`), `balanceProfile` (default `small-default`; an
+  unknown profile is `404`). The match starts in `CREATED`. `tickIntervalMs`/`size`/`victoryCondition`
+  are accepted but informational (the active victory condition and gameplay numbers live in the
+  balance profile, rule 6; tick pacing is orchestration timing, never an engine input — principle 1).
+- **Lifecycle transitions** are guarded by the engine `LifecycleTransitions` state machine (E1-15:
+  `CREATED→LOBBY→RUNNING→(PAUSED↔RUNNING)→CONCLUDED→ARCHIVED`). `start` drives `CREATED→LOBBY→RUNNING`
+  and kicks the tick loop; `pause` halts it (`RUNNING→PAUSED`); `resume` restarts it (`PAUSED→RUNNING`).
+  An **illegal transition is `409 Conflict`** (a 4xx) — e.g. resuming a non-paused match, starting a
+  paused/concluded match, pausing a non-running match. The orchestrator concludes the match itself
+  (`RUNNING→CONCLUDED`) when a victory condition fires.
+- **State read** (`GET …/state`) is fog-applied server-side. With `?requester=factionId` it returns
+  that faction's fog-filtered `WorldView` (own state full; everyone else fog-limited to ownership +
+  rough strength, default-deny) built by the authoritative `WorldViewBuilder` (E3-02). With no
+  `requester` it returns a strictly-public `SpectatorView` `{ gameId, tick, status, reputations[] }` —
+  no private faction state at all. An unknown match or a `requester` that is not a seat is `404`.
+- **Events** (`GET …/events`) page the append-only public event log (E1-16 `PublicEvent`):
+  `fromTick` is an inclusive lower bound (every returned event has `tick ≥ fromTick`), ordered by
+  `(tick, seq)`; `limit` caps the page (default 200, max 1000). `nextFromTick` is the forward cursor
+  (the tick after the last returned, or `-1` at the end of the log).
+- **Leaderboard** (`GET …/leaderboard`) is the engine's config-weighted `Scoring.rank` (E1-15) at the
+  last resolved snapshot: `entries[]` ranked rank-1-first (score desc, faction id asc on ties). Public
+  by construction (no hidden state leaks through the weighted roll-up).
+- All match-state reads carry `Cache-Control: no-store` (game state changes every tick). The live
+  push of ticks/events/overlay over the websocket is **E6-04** (this card is REST-only).
 
 ## Sovereign (agent) configuration
 
@@ -73,7 +102,7 @@ PATCH/api/factions/{factionId}       update standing directives (between matches
 
 ```
 GET /api/galaxy/{gameSeed}/system/{systemId}  → procedural system detail (+ active state if promoted)
-GET /api/games/{gameId}/leaderboard           → scores/ranking
+GET /api/games/{gameId}/leaderboard           → scores/ranking   (contract under Match lifecycle, E6-01)
 ```
 
 ## Conventions

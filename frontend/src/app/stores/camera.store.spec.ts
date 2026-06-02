@@ -252,4 +252,84 @@ describe('CameraStore', () => {
     store.stepFrame(0.016, null);
     expect(store.levelF()).toBe(store.state().z);
   });
+
+  // ---- floating origin (E8-07) ----
+
+  it('starts with a zero floating origin', () => {
+    expect(store.origin()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('does not re-base near the galaxy centre when zoomed out', () => {
+    store.setViewport({ cssWidth: 800, cssHeight: 600, dpr: 1 });
+    // Zoomed out, small world coords: drift in pixels stays well under the
+    // threshold, so the origin must remain 0 (matches pre-E8-07 behaviour).
+    store.jumpTo(200, 150, 0);
+    for (let i = 0; i < 200; i++) {
+      store.stepFrame(0.05, null);
+    }
+    expect(store.origin()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('re-bases the origin off zero and tracks the camera after deep-zoom drift', () => {
+    store.setViewport({ cssWidth: 1920, cssHeight: 1080, dpr: 2 });
+    // Deep zoom -> large scalePx, so even a modest world offset crosses the
+    // pixel-magnitude re-base threshold while the camera eases to (5000,-3000).
+    store.jumpTo(5000, -3000, CAMERA_ZMAX);
+    for (let i = 0; i < 400; i++) {
+      store.stepFrame(0.05, null);
+    }
+    const o = store.origin();
+    const cam = store.state();
+    // Origin left zero and now sits in the camera's neighbourhood (the re-base
+    // point may trail the still-easing camera by a fraction of the threshold;
+    // the bounded-offset invariant test below is the strict guarantee).
+    expect(Math.hypot(o.x, o.y)).toBeGreaterThan(0);
+    expect(Math.hypot(o.x - cam.x, o.y - cam.y)).toBeLessThan(50);
+  });
+
+  it('an explicit rebaseOrigin snaps the origin exactly onto the camera', () => {
+    store.setViewport({ cssWidth: 1920, cssHeight: 1080, dpr: 2 });
+    store.jumpTo(5000, -3000, CAMERA_ZMAX);
+    for (let i = 0; i < 400; i++) {
+      store.stepFrame(0.05, null);
+    }
+    store.rebaseOrigin();
+    const o = store.origin();
+    const cam = store.state();
+    expect(o.x).toBe(cam.x);
+    expect(o.y).toBe(cam.y);
+  });
+
+  it('re-base is transparent: w2s is byte-identical before and after', () => {
+    store.setViewport({ cssWidth: 1920, cssHeight: 1080, dpr: 2 });
+    store.jumpTo(5000, -3000, CAMERA_ZMAX);
+    for (let i = 0; i < 400; i++) {
+      store.stepFrame(0.05, null);
+    }
+    // Sample the CPU projection of a world point, then force another re-base
+    // and re-sample: the on-screen pixel must be identical (origin only changes
+    // the GPU reference frame, never the float64 CPU w2s transform).
+    const before = store.w2s();
+    const px0 = before.x(5001.25);
+    const py0 = before.y(-2999.5);
+    store.rebaseOrigin();
+    const after = store.w2s();
+    expect(after.x(5001.25)).toBe(px0);
+    expect(after.y(-2999.5)).toBe(py0);
+  });
+
+  it('keeps the origin-relative camera offset bounded in pixels (precision)', () => {
+    store.setViewport({ cssWidth: 1920, cssHeight: 1080, dpr: 2 });
+    store.jumpTo(5000, -3000, CAMERA_ZMAX);
+    for (let i = 0; i < 400; i++) {
+      store.stepFrame(0.05, null);
+    }
+    const o = store.origin();
+    const cam = store.state();
+    const scalePx = store.scale() * store.viewport().dpr;
+    const offsetPx = Math.hypot(cam.x - o.x, cam.y - o.y) * scalePx;
+    // The whole point of re-basing: the float32 magnitude the GPU receives for
+    // the camera stays small even at maximum zoom + large world coordinates.
+    expect(offsetPx).toBeLessThanOrEqual(20000);
+  });
 });

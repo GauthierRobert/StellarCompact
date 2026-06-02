@@ -5,8 +5,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
@@ -37,9 +39,11 @@ import java.time.Duration;
 public class TileController {
 
     private final TileCache tileCache;
+    private final TilePrebakeService prebake;
 
-    public TileController(TileCache tileCache) {
+    public TileController(TileCache tileCache, TilePrebakeService prebake) {
         this.tileCache = tileCache;
+        this.prebake = prebake;
     }
 
     @GetMapping("/{gameSeed}/tile/{level}/{x}/{y}")
@@ -75,6 +79,44 @@ public class TileController {
                 .eTag(etag)
                 .cacheControl(cache)
                 .body(payload);
+    }
+
+    /**
+     * Pre-bake / warm the common views for a launched galaxy (E8-07; architecture
+     * 02 section 5). Warms the coarse aggregate levels plus the active region's
+     * fine tiles into the same {@link TileCache} the GET handler reads, so the
+     * subsequent live tile fetches (and the CDN in front of them) are cache hits.
+     * This is an admin/launch-time operation, not a hot path; it carries
+     * {@code no-store} (the count is volatile and not a cacheable artifact).
+     *
+     * <p>The active region (where the Sovereigns are) is passed as a world bbox at
+     * a fine {@code level}; the coarse levels are warmed unconditionally. Bounded
+     * by {@link TilePrebakeService#MAX_ACTIVE_TILES} - the warm never iterates the
+     * catalog.
+     */
+    @PostMapping("/{gameSeed}/prebake")
+    public ResponseEntity<PrebakeResult> prebake(
+            @PathVariable("gameSeed") long gameSeed,
+            @RequestParam("level") int level,
+            @RequestParam("minX") double minX,
+            @RequestParam("minY") double minY,
+            @RequestParam("maxX") double maxX,
+            @RequestParam("maxY") double maxY) {
+
+        if (!TileGrid.isStarListLevel(level)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "prebake level must be a star-list (fine) level >= "
+                            + TileGrid.STAR_LIST_MIN_LEVEL + ", got " + level);
+        }
+        int coarse = prebake.warmCoarse(gameSeed);
+        int active = prebake.warmActiveRegion(gameSeed, level, minX, minY, maxX, maxY);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new PrebakeResult(coarse, active, coarse + active));
+    }
+
+    /** Result of a pre-bake/warm request: how many tiles were warmed. */
+    public record PrebakeResult(int coarseTiles, int activeTiles, int totalTiles) {
     }
 
     /** True if any token in the If-None-Match header equals the tile's ETag (or "*"). */

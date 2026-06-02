@@ -190,6 +190,22 @@ export interface ViewTransform {
   readonly heightPx: number;
   /** World to screen device-pixel projection. */
   readonly w2s: (wx: number, wy: number) => { x: number; y: number };
+  /**
+   * Floating-origin world anchor (E8-07). The camera periodically re-bases this
+   * to near the rendered camera position so that, at extreme zoom / large world
+   * coordinates, the renderer can subtract it from world coords (in float64 on
+   * the CPU) BEFORE they are uploaded to float32 GPU buffers — keeping rendered
+   * magnitudes small and preserving float32 precision during "infinite" descent.
+   *
+   * It is mathematically transparent: the draw layer subtracts it from BOTH the
+   * star positions and the recovered camera world, so `(world - origin) -
+   * (camWorld - origin)` equals the original `world - camWorld`. The on-screen
+   * result before and after a re-base is identical (the re-base is invisible).
+   *
+   * Defaults to 0 (no re-base) so all pre-E8-07 callers/tests are unaffected.
+   */
+  readonly originX?: number;
+  readonly originY?: number;
 }
 
 /**

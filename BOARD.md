@@ -403,7 +403,8 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** lifecycle endpoints drive the orchestrator; state read is fog-correct per requester; events paginate by tick.
 
 ### E6-02 · Faction (Sovereign) config REST
-- **Status:** ☐ Todo · **Module:** api · **Depends on:** E6-01 · **Delegate to:** agent-runtime-developer · 🔒
+- **Status:** ✅ Done · **Module:** api · **Depends on:** E6-01 · **Delegate to:** agent-runtime-developer · 🔒
+- **Security sign-off:** PENDING (X-01) — owner resolved server-side only (Principal → `X-Owner-Token` dev stand-in → null), redaction via two view factories, reuses `FactionOwnershipRegistry`; non-owner reads redact (identity only), non-owner writes 403, PATCH gated to non-RUNNING. Replace `X-Owner-Token` with verified session auth before production.
 - **Read first:** `docs/specs/rest-api.md` §Sovereign configuration
 - **Do:** `POST /api/games/{id}/factions` (persona/goals/hardConstraints/modelTier), `GET /api/factions/{id}`
   (owner-only sensitive fields redacted otherwise), `PATCH` standing directives (persistent galaxies, between matches).
@@ -444,7 +445,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** small galaxy renders & pans/zooms like the PoC; reads tiles via E6-03; detail gated by zoom.
 
 ### E7-03 · STOMP client → signals
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E7-01, E6-04 · **Delegate to:** frontend-developer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E7-01, E6-04 · **Delegate to:** frontend-developer
 - **Read first:** `.claude/skills/realtime-websocket`, `docs/specs/websocket-protocol.md`
 - **Do:** STOMP/WebSocket client that subscribes to ticks/events/overlay (and owner view) and feeds **signals**.
   Reconnect → resubscribe + REST `overlay?sinceTick=` resync.

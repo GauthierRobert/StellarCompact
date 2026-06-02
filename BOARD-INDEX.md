@@ -57,14 +57,14 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 
 ## E6 — API: REST + STOMP (Phase 2)
 - ✅ **E6-01** Match lifecycle REST — *deps: E1-15, E5-03* — agent-runtime-developer
-- ☐ **E6-02** 🔒 Faction config REST (owner redaction) — *deps: E6-01* — agent-runtime-developer
+- ✅ **E6-02** 🔒 Faction config REST (owner redaction) — *deps: E6-01* — agent-runtime-developer
 - ✅ **E6-03** Tile + overlay endpoints (cacheable, ETag) — *deps: E2-01* — galaxy-renderer-engineer
 - ✅ **E6-04** 🔒 STOMP live stream (public topics + owner-only view) — *deps: E1-16, E4-05* — agent-runtime-developer
 
 ## E7 — Frontend, canvas PoC port (Phase 2)
 - ✅ **E7-01** Signal stores (camera + game state) — *deps: E0-02* — frontend-developer
 - ✅ **E7-02** Canvas galaxy renderer (PoC port) — *deps: E7-01, E6-03* — galaxy-renderer-engineer
-- ☐ **E7-03** STOMP client → signals — *deps: E7-01, E6-04* — frontend-developer
+- ✅ **E7-03** STOMP client → signals — *deps: E7-01, E6-04* — frontend-developer
 - ✅ **E7-04** HUD & panels — *deps: E7-01* — frontend-developer
 - ☐ **E7-05** Sovereign config screens — *deps: E6-02* — frontend-developer
 - ☐ **E7-06** Spectator view & public event feed — *deps: E7-02, E7-03* — frontend-developer

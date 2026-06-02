@@ -150,7 +150,7 @@ public final class Resolver {
     private static GameState applyStep(ResolutionStep step, GameState state,
                                        List<SubmittedAction> slice, StepContext ctx) {
         return switch (step) {
-            case DIPLOMATIC_STATE -> resolveActionDriven(state, slice, ctx);
+            case DIPLOMATIC_STATE -> resolveDiplomacy(state, slice, ctx);
             case ESPIONAGE -> resolveActionDriven(state, slice, ctx);
             case MOVEMENT -> resolveMovement(state, slice, ctx);
             case COMBAT -> resolveCombat(state, slice, ctx);
@@ -251,6 +251,20 @@ public final class Resolver {
     }
 
     /**
+     * The DIPLOMATIC_STATE step (E1-12; game-design 03 step 1, 04). Folds the ordered
+     * diplomatic-state slice via {@link DiplomacyResolution}: treaty lifecycle
+     * (propose/accept/decline/break), the reputation ledger, war declarations (recording
+     * a {@link com.stellarcompact.engine.state.WarState}) and resource tribute (routed
+     * through the tick-wide {@link SpendLedger}). It resolves first, before any kinetic
+     * step, so a war declared or a treaty broken this tick is in force for the actions
+     * that follow.
+     */
+    private static GameState resolveDiplomacy(GameState state, List<SubmittedAction> slice,
+                                              StepContext ctx) {
+        return DiplomacyResolution.resolve(state, slice, ctx.tick(), ctx.profile(), ctx.ledger());
+    }
+
+    /**
      * The DEVELOPMENT step (E1-08). First folds the Build/Research/Terraform action
      * slice ("begin" phase: queue a building, start a tech, start a terraform - each
      * escrowing its one-off cost through the tick-wide ledger), then runs the passive
@@ -289,11 +303,17 @@ public final class Resolver {
         Action action = sa.action();
         FactionId actor = sa.actor();
         return switch (action) {
-            case Action.BreakTreaty a -> stubBreakTreaty(state, actor, a, ctx);
-            case Action.AcceptTreaty a -> stubAcceptTreaty(state, actor, a, ctx);
-            case Action.DeclineTreaty a -> stubDeclineTreaty(state, actor, a, ctx);
-            case Action.ProposeTreaty a -> stubProposeTreaty(state, actor, a, ctx);
-            case Action.DeclareWar a -> stubDeclareWar(state, actor, a, ctx);
+            // Diplomatic-state actions (treaty lifecycle, war, tribute) are handled by
+            // resolveDiplomacy / DiplomacyResolution for the DIPLOMATIC_STATE step (E1-12),
+            // not through this per-action dispatch, so these arms are unreachable. They
+            // remain only to keep the sealed-Action switch exhaustive (a new variant must
+            // still break compilation here).
+            case Action.BreakTreaty ignored -> state;
+            case Action.AcceptTreaty ignored -> state;
+            case Action.DeclineTreaty ignored -> state;
+            case Action.ProposeTreaty ignored -> state;
+            case Action.DeclareWar ignored -> state;
+            case Action.Tribute ignored -> state;
 
             case Action.Espionage a -> stubEspionage(state, actor, a, ctx);
 
@@ -322,7 +342,6 @@ public final class Resolver {
             // but the switch must stay exhaustive over the sealed set: route them to
             // the inert no-op so adding a variant remains a compile error.
             case Action.SendMessage ignored -> state;
-            case Action.Tribute ignored -> state;
             case Action.DemandTribute ignored -> state;
             case Action.Hold ignored -> state;
             case UnknownAction ignored -> state;
@@ -359,34 +378,6 @@ public final class Resolver {
     // Each is a documented no-op: returns state unchanged. They exist now so the
     // dispatch switch is exhaustive and the wiring is testable. Any future spend
     // MUST go through ctx.ledger().escrow(actor, cost), never a direct Faction debit.
-
-    private static GameState stubBreakTreaty(GameState s, FactionId a, Action.BreakTreaty x, StepContext c) {
-        return s; // TODO(E1-08): terminate treaty, announce, apply reputation penalty.
-    }
-
-    private static GameState stubAcceptTreaty(GameState s, FactionId a, Action.AcceptTreaty x, StepContext c) {
-        return s; // TODO(E1-08): activate the proposed treaty and announce it.
-    }
-
-    private static GameState stubDeclineTreaty(GameState s, FactionId a, Action.DeclineTreaty x, StepContext c) {
-        return s; // TODO(E1-08): reject the proposed treaty.
-    }
-
-    private static GameState stubProposeTreaty(GameState s, FactionId a, Action.ProposeTreaty x, StepContext c) {
-        return s; // TODO(E1-08): record the pending treaty for the counterparty.
-    }
-
-    /**
-     * E1-09: declare war. Records a {@link com.stellarcompact.engine.state.WarState}
-     * between the actor and the target (idempotent - re-declaring an existing war is a
-     * no-op via {@code GameState.withWar}). This is the positive war-state the
-     * validator's kinetic gate (F1) and the MOVEMENT interception check require. The
-     * unprovoked-war reputation penalty (game-design 04) is deferred to the diplomacy
-     * card E1-12; this card lands only the state the kinetic/interception path needs.
-     */
-    private static GameState stubDeclareWar(GameState s, FactionId a, Action.DeclareWar x, StepContext c) {
-        return s.withWar(a, x.target(), c.tick());
-    }
 
     private static GameState stubEspionage(GameState s, FactionId a, Action.Espionage x, StepContext c) {
         return s; // TODO(E1-12): seeded espionage roll; escrow Influence/Tech cost.

@@ -25,6 +25,10 @@ class ActionExhaustivenessTest {
                 ActionCategory.of(new Action.DeclineTreaty(treaty())));
         assertEquals(ActionCategory.DIPLOMATIC_STATE,
                 ActionCategory.of(new Action.DeclareWar(faction())));
+        // E1-12: Tribute moves resources, so it is a diplomatic-state action, not soft.
+        assertEquals(ActionCategory.DIPLOMATIC_STATE,
+                ActionCategory.of(new Action.Tribute(faction(),
+                        new com.stellarcompact.engine.state.ResourceBundle(1, 0, 0, 0, 0))));
 
         assertEquals(ActionCategory.ESPIONAGE,
                 ActionCategory.of(new Action.Espionage(faction(), EspionageOperation.SCOUT)));

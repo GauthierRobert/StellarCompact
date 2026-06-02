@@ -52,11 +52,11 @@ balanceProfile:
     unlocks: { techId: [capabilityKey, ...], ... }        # what a tech gates once UNLOCKED: ship-spec or building configKeys (E1-08). A capability not named by any tech is ungated
   diplomacy:
     reputation:
-      gainHonourTreaty: ..
-      penaltyBreakTreaty: (weight × remainingDuration)
-      penaltyUnprovokedWar: ..
+      gainHonourTreaty: ..                                 # awarded for honouring a treaty to term (on expiry)
+      penaltyBreakTreaty: ..                               # E1-12: coefficient; BreakTreaty penalty = penaltyBreakTreaty × treatyEnforcement[type] × remainingDurationTicks
+      penaltyUnprovokedWar: ..                             # E1-12: flat reputation hit on declaring a NEW war (idempotent re-declare is not re-penalised)
       espionageDetectedPenalty: ..
-    treatyEnforcement: { ... }
+    treatyEnforcement: { ceasefire:.., nonAggression:.., tradePact:.., defensivePact:.., alliance:.., vassalage:.. }   # E1-12: per-treaty-type weight (camelCase keys = TreatyType.configKey()); used as the BreakTreaty penalty weight
   victory:
     domination: { systemPct: .. }
     economic:   { influenceTarget: .., orTopForTicks: .. }

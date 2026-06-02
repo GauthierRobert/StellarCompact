@@ -98,4 +98,22 @@ final class ResolveFixtures {
                 base.name(), base.version(), base.resources(), base.population(), base.market(),
                 base.construction(), combat, base.tech(), base.diplomacy(), base.victory(), base.tick());
     }
+
+    /**
+     * A profile whose diplomacy block carries the real E1-12 reputation coefficients
+     * and per-treaty enforcement weights (matching {@code small-default.json}), so the
+     * diplomacy resolution tests can assert exact reputation deltas. Every number lives
+     * here, none in the resolver (rule 6).
+     */
+    static BalanceProfile diplomacyProfile() {
+        BalanceProfile base = profile();
+        BalanceProfile.Diplomacy diplomacy = new BalanceProfile.Diplomacy(
+                new BalanceProfile.Reputation(5.0, 0.5, 15.0, 8.0),
+                Map.of("ceasefire", 1.0, "nonAggression", 1.5, "tradePact", 1.0,
+                        "defensivePact", 2.0, "alliance", 3.0, "vassalage", 2.5));
+        return new BalanceProfile(
+                base.name(), base.version(), base.resources(), base.population(), base.market(),
+                base.construction(), base.combat(), base.tech(), diplomacy, base.victory(),
+                base.tick());
+    }
 }

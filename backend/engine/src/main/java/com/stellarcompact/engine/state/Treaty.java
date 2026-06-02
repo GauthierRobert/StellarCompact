@@ -47,4 +47,29 @@ public record Treaty(
             throw new IllegalArgumentException("Treaty.parties must have >= 2 signatories");
         }
     }
+
+    /**
+     * Copy-on-write: a new treaty identical to this one but in {@code newStatus}
+     * (the DIPLOMATIC_STATE step, E1-12, walks PROPOSED -&gt; ACTIVE on accept and
+     * ACTIVE -&gt; BROKEN on break; the EVENTS/expiry path marks EXPIRED). Keeps the
+     * lifecycle transition immutable, like the {@code Faction.with*} helpers.
+     */
+    public Treaty withStatus(TreatyStatus newStatus) {
+        return new Treaty(id, type, parties, terms, signedTick, expiresTick, newStatus);
+    }
+
+    /** @return {@code true} iff {@code faction} is one of this treaty's signatories. */
+    public boolean involves(FactionId faction) {
+        return parties.contains(faction);
+    }
+
+    /** @return the signatory other than {@code self} for a two-party treaty, or {@code null}. */
+    public FactionId counterpartyOf(FactionId self) {
+        for (FactionId p : parties) {
+            if (!p.equals(self)) {
+                return p;
+            }
+        }
+        return null;
+    }
 }

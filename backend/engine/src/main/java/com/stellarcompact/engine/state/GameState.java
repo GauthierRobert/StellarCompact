@@ -123,6 +123,19 @@ public record GameState(
     }
 
     /**
+     * Copy-on-write: a new snapshot with {@code treaty} inserted/replaced by its id.
+     * The DIPLOMATIC_STATE step (E1-12) folds treaty lifecycle transitions
+     * (PROPOSED -&gt; ACTIVE on accept, ACTIVE -&gt; BROKEN on break) through this helper,
+     * every other collection shared structurally.
+     */
+    public GameState withTreaty(Treaty treaty) {
+        Map<TreatyId, Treaty> next = new LinkedHashMap<>(treaties);
+        next.put(treaty.id(), treaty);
+        return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
+                factions, systems, fleets, next, routes, marketOrders, wars);
+    }
+
+    /**
      * Copy-on-write: a new snapshot whose entire market order book is replaced by
      * {@code newOrders}. The market-matching step (E1-07) rebuilds the book once
      * per tick (filled/partial/withdrawn orders updated together), so it replaces

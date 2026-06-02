@@ -38,6 +38,9 @@ class ResolutionOrderingTest {
     void stepMappingFollowsTheElevenStepOrder() {
         assertEquals(ResolutionStep.DIPLOMATIC_STATE, SubmittedAction.stepOf(new Action.DeclareWar(BETA)));
         assertEquals(ResolutionStep.DIPLOMATIC_STATE, SubmittedAction.stepOf(new Action.BreakTreaty(new TreatyId("t"))));
+        // E1-12: Tribute transfers resources, so it is a DIPLOMATIC_STATE action, not soft.
+        assertEquals(ResolutionStep.DIPLOMATIC_STATE, SubmittedAction.stepOf(new Action.Tribute(BETA,
+                new com.stellarcompact.engine.state.ResourceBundle(1, 0, 0, 0, 0))));
         assertEquals(ResolutionStep.ESPIONAGE, SubmittedAction.stepOf(new Action.Espionage(BETA, EspionageOperation.SCOUT)));
         assertEquals(ResolutionStep.MOVEMENT, SubmittedAction.stepOf(new Action.MoveFleet(new FleetId("f"), List.of(new SystemId("s")), new SystemId("s"))));
         assertEquals(ResolutionStep.COMBAT, SubmittedAction.stepOf(new Action.Attack(new FleetId("f"), new AttackTarget.OnSystem(new SystemId("s")))));
@@ -53,8 +56,10 @@ class ResolutionOrderingTest {
         assertNull(SubmittedAction.stepOf(new Action.SendMessage(BETA, "hi")));
         assertNull(SubmittedAction.stepOf(new Action.Hold()));
         assertNull(SubmittedAction.stepOf(new UnknownAction("Future")));
-        assertNull(SubmittedAction.stepOf(new Action.Tribute(BETA,
-                new com.stellarcompact.engine.state.ResourceBundle(1, 0, 0, 0, 0))));
+        // DemandTribute is a non-binding ultimatum: still soft, no scheduled step.
+        assertNull(SubmittedAction.stepOf(new Action.DemandTribute(BETA,
+                new com.stellarcompact.engine.state.ResourceBundle(1, 0, 0, 0, 0),
+                java.util.Optional.empty())));
     }
 
     // ---- ordering: step, then faction id, then submission order ------------------

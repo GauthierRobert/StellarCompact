@@ -55,6 +55,10 @@ public enum ActionCategory {
             case Action.DeclineTreaty ignored -> DIPLOMATIC_STATE;
             case Action.ProposeTreaty ignored -> DIPLOMATIC_STATE;
             case Action.DeclareWar ignored -> DIPLOMATIC_STATE;
+            // Tribute transfers resources, so it has a mechanical state change and is
+            // resolved in the diplomatic-state step (E1-12), not soft chatter. (Its
+            // sibling DemandTribute is a non-binding ultimatum and stays soft.)
+            case Action.Tribute ignored -> DIPLOMATIC_STATE;
 
             // 2. Espionage.
             case Action.Espionage ignored -> ESPIONAGE;
@@ -86,7 +90,6 @@ public enum ActionCategory {
 
             // Soft diplomacy (no mechanical state change of its own).
             case Action.SendMessage ignored -> DIPLOMATIC_SOFT;
-            case Action.Tribute ignored -> DIPLOMATIC_SOFT;
             case Action.DemandTribute ignored -> DIPLOMATIC_SOFT;
 
             // No-op + ignorable future input.

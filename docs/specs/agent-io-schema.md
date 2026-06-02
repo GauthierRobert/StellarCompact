@@ -64,7 +64,7 @@ Action.type ∈ {
   Attack         { fleet, target }            // target = systemId | fleetId
   Blockade       { fleet, target }            // target = routeId | systemId
   Raid           { fleet, routeId }
-  Espionage      { target, operationType }
+  Espionage      { target, operationType }    // operationType ∈ { SCOUT, STEAL_INTEL, SABOTAGE, INCITE_UNREST }; seeded success + detection (E1-13)
   Hold           { }                          // explicit no-op
 }
 ```
@@ -78,6 +78,8 @@ The diplomatic-state actions resolve **first** (resolution-order step 1, before 
 - `DeclareWar` records a `WarState` (the positive gate kinetic actions require) and docks `penaltyUnprovokedWar` for a **new** war; re-declaring an existing war is idempotent and not re-penalised.
 - `Tribute` is engine-enforced (not soft chatter): it **transfers** `resources` from payer to recipient through the tick's escrow ledger (atomic debit + credit). `DemandTribute` remains a non-binding ultimatum delivered to the target.
 - Active treaties are enforced by the validator refusing illegal kinetic actions: `Attack`/`Blockade`/`Raid`/`DeclareWar` against a NonAggression/Alliance/Ceasefire partner are `Rejected{TREATY_FORBIDS, treatyId}` until the treaty is broken first.
+
+**Espionage intel (E1-13).** A successful `Espionage(SCOUT)` records the acting faction in the **target faction's `revealedIntel`** set (engine state, held on the spied-upon `Faction`, not a new `GameState` component). The fog-of-war filter (E3-02) reads `revealedIntel` to widen the actor's `visibleNeighbours` view of that faction beyond the default ownership+rough-strength fog (e.g. exposing hidden stockpile/tech detail) for as long as the reveal stands — it is monotone within a match. A detected operation costs the actor public reputation, which surfaces to everyone via the existing `reputations[]` ledger.
 
 ## 4. Validation contract
 

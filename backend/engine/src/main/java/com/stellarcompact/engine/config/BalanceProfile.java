@@ -42,26 +42,53 @@ public record BalanceProfile(
         Victory victory,
         Tick tick,
         // --- E2-04 home placement (append-only; see HomePlacement record below) ---
-        HomePlacement homePlacement
+        HomePlacement homePlacement,
+        // --- E1-13 espionage (append-only; see Espionage record below) ---
+        Espionage espionage
 ) {
 
     /**
-     * Compact constructor. Movement (E1-09) and home placement (E2-04) are both
-     * additive; a profile (or fixture) that omits either gets the inert defaults
-     * ({@link Movement#defaults()} = free travel/interception off,
-     * {@link HomePlacement#defaults()}) so it stays loadable and deterministic
+     * Compact constructor. Movement (E1-09), home placement (E2-04) and espionage
+     * (E1-13) are all additive; a profile (or fixture) that omits any of them gets the
+     * inert defaults ({@link Movement#defaults()} = free travel/interception off,
+     * {@link HomePlacement#defaults()}, {@link Espionage#defaults()} = ops always
+     * fail / are never detected) so it stays loadable and deterministic
      * (forward-compatible, like the tech DAG / terraform chain defaults).
      */
     public BalanceProfile {
         movement = movement == null ? Movement.defaults() : movement;
         homePlacement = homePlacement == null ? HomePlacement.defaults() : homePlacement;
+        espionage = espionage == null ? Espionage.defaults() : espionage;
     }
 
     /**
-     * Backwards-compatible constructor without the E2-04 {@code homePlacement}
-     * block: delegates to the canonical constructor with the inert default. Lets
-     * pre-E2-04 fixtures that build a profile positionally (through {@code tick})
-     * keep compiling unchanged.
+     * Backwards-compatible constructor through {@code homePlacement} (no E1-13
+     * {@code espionage} block): delegates to the canonical constructor with
+     * {@link Espionage#defaults()}.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick,
+            HomePlacement homePlacement) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, homePlacement, Espionage.defaults());
+    }
+
+    /**
+     * Backwards-compatible constructor through {@code tick} WITH a movement block (no
+     * E2-04 {@code homePlacement}, no E1-13 {@code espionage}): delegates with both
+     * inert defaults. Lets pre-E2-04 fixtures that build a profile positionally
+     * (through {@code tick}) keep compiling unchanged.
      */
     public BalanceProfile(
             String name,
@@ -77,16 +104,16 @@ public record BalanceProfile(
             Victory victory,
             Tick tick) {
         this(name, version, resources, population, market, construction, combat,
-                movement, tech, diplomacy, victory, tick, HomePlacement.defaults());
+                movement, tech, diplomacy, victory, tick,
+                HomePlacement.defaults(), Espionage.defaults());
     }
 
     /**
-     * Backwards-compatible constructor predating both the E1-09 {@code movement} and
-     * E2-04 {@code homePlacement} blocks: delegates to the canonical constructor with
-     * both inert defaults ({@link Movement#defaults()}, {@link HomePlacement#defaults()}).
-     * Lets pre-E1-09 fixtures that build a profile positionally (through {@code tick},
-     * without a movement block) keep compiling; combat/economy fixtures that do not care
-     * about travel get interception-off defaults.
+     * Backwards-compatible constructor predating the E1-09 {@code movement}, E2-04
+     * {@code homePlacement} and E1-13 {@code espionage} blocks: delegates with all
+     * three inert defaults. Lets pre-E1-09 fixtures that build a profile positionally
+     * (through {@code tick}, without a movement block) keep compiling; combat/economy
+     * fixtures that do not care about travel get interception-off defaults.
      */
     public BalanceProfile(
             String name,
@@ -101,7 +128,8 @@ public record BalanceProfile(
             Victory victory,
             Tick tick) {
         this(name, version, resources, population, market, construction, combat,
-                Movement.defaults(), tech, diplomacy, victory, tick, HomePlacement.defaults());
+                Movement.defaults(), tech, diplomacy, victory, tick,
+                HomePlacement.defaults(), Espionage.defaults());
     }
 
     /** Per-tick resource economy. */
@@ -535,6 +563,86 @@ public record BalanceProfile(
          */
         public static HomePlacement defaults() {
             return new HomePlacement(1, 1, 1, 0.5, "oceanic");
+        }
+    }
+
+    /**
+     * Espionage tunables (E1-13; game-design 03 section C "Espionage", 06 section 3).
+     * Every probabilistic espionage outcome reads its odds, cost and effect magnitude
+     * from here - nothing is hardcoded in {@code EspionageResolution} (rule 6).
+     *
+     * <p>All per-operation maps are keyed by the operation's
+     * {@link com.stellarcompact.engine.action.EspionageOperation#configKey()}
+     * ({@code "scout"}, {@code "stealIntel"}, {@code "sabotage"}, {@code "inciteUnrest"}).
+     * An operation absent from a map takes the neutral default noted below, so a
+     * partial profile degrades gracefully.
+     *
+     * <ul>
+     *   <li>{@code successBase} - base success probability in [0,1] per op (default 0:
+     *       an unconfigured op always fails). The effective success is
+     *       {@code clamp(successBase - counterIntelSuccessPenalty if the target has the
+     *       counter-intel tech, 0, 1)}; the seeded success roll {@code r in [0,1)}
+     *       succeeds iff {@code r < effectiveSuccess}.</li>
+     *   <li>{@code detectionBase} - base probability in [0,1] that a run (success OR
+     *       failure) is detected and attributed to the actor (default 0: never
+     *       detected). The effective detection is
+     *       {@code clamp(detectionBase + counterIntelDetectionBonus if the target has
+     *       counter-intel, 0, 1)}; a separate seeded roll decides detection.</li>
+     *   <li>{@code cost} - the resources (typically Influence/Tech) escrowed when the
+     *       op is run, win or lose (an op absent costs nothing).</li>
+     *   <li>{@code counterIntelTech} - the {@code TechId} value of the tech that, when
+     *       UNLOCKED by the <em>target</em>, confers counter-intelligence; blank/absent
+     *       disables the counter-intel mechanic. (game-design 06: "Intelligence Agency").</li>
+     *   <li>{@code counterIntelSuccessPenalty} - amount subtracted from an op's success
+     *       odds when the target holds the counter-intel tech (>= 0).</li>
+     *   <li>{@code counterIntelDetectionBonus} - amount added to an op's detection odds
+     *       when the target holds the counter-intel tech (>= 0).</li>
+     *   <li>{@code stealResourceFraction} - fraction (0..1) of the target's stockpile a
+     *       successful {@code STEAL_INTEL} transfers when no stealable tech is available
+     *       (the resource fallback; a successful steal prefers transferring a tech).</li>
+     *   <li>{@code unrestPopulationLoss} - population removed from the struck colony on a
+     *       successful {@code INCITE_UNREST} (>= 0).</li>
+     *   <li>{@code unrestLoyaltyLoss} - loyalty (0..1, floored at 0) removed from the
+     *       struck system on a successful {@code INCITE_UNREST} (>= 0).</li>
+     * </ul>
+     */
+    public record Espionage(
+            Map<String, Double> successBase,
+            Map<String, Double> detectionBase,
+            Map<String, ResourceBundle> cost,
+            String counterIntelTech,
+            double counterIntelSuccessPenalty,
+            double counterIntelDetectionBonus,
+            double stealResourceFraction,
+            long unrestPopulationLoss,
+            double unrestLoyaltyLoss
+    ) {
+        public Espionage {
+            successBase = successBase == null ? Map.of() : Map.copyOf(successBase);
+            detectionBase = detectionBase == null ? Map.of() : Map.copyOf(detectionBase);
+            cost = cost == null ? Map.of() : Map.copyOf(cost);
+            if (counterIntelSuccessPenalty < 0.0) {
+                counterIntelSuccessPenalty = 0.0;
+            }
+            if (counterIntelDetectionBonus < 0.0) {
+                counterIntelDetectionBonus = 0.0;
+            }
+            if (unrestPopulationLoss < 0) {
+                unrestPopulationLoss = 0;
+            }
+            if (unrestLoyaltyLoss < 0.0) {
+                unrestLoyaltyLoss = 0.0;
+            }
+        }
+
+        /**
+         * Inert defaults for a profile that omits the espionage block: every op always
+         * fails (empty {@code successBase}) and is never detected (empty
+         * {@code detectionBase}), no costs, no counter-intel tech, zero effect
+         * magnitudes. A match that wants espionage supplies the block.
+         */
+        public static Espionage defaults() {
+            return new Espionage(Map.of(), Map.of(), Map.of(), "", 0.0, 0.0, 0.0, 0, 0.0);
         }
     }
 }

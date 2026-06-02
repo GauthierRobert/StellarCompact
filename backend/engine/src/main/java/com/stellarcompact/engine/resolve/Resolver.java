@@ -151,7 +151,7 @@ public final class Resolver {
                                        List<SubmittedAction> slice, StepContext ctx) {
         return switch (step) {
             case DIPLOMATIC_STATE -> resolveDiplomacy(state, slice, ctx);
-            case ESPIONAGE -> resolveActionDriven(state, slice, ctx);
+            case ESPIONAGE -> resolveEspionage(state, slice, ctx);
             case MOVEMENT -> resolveMovement(state, slice, ctx);
             case COMBAT -> resolveCombat(state, slice, ctx);
             case INTERDICTION -> resolveInterdiction(state, slice, ctx);
@@ -247,6 +247,24 @@ public final class Resolver {
     private static GameState resolveInterdiction(GameState state, List<SubmittedAction> slice,
                                                  StepContext ctx) {
         return InterdictionResolution.resolve(state, slice, ctx.seed(), ctx.tick(),
+                ctx.profile(), ctx.ledger());
+    }
+
+    /**
+     * The ESPIONAGE step (E1-13; game-design 03 step 2). Folds the ordered
+     * {@code Espionage} action slice through {@link EspionageResolution}: each op runs a
+     * seeded success roll and a seeded detection roll (keyed by
+     * {@code gameSeed XOR tick XOR opId}), applies its effect on success (reveal intel /
+     * steal a tech or resources / disable a building / incite unrest), escrows its
+     * Influence/Tech cost through the tick-wide ledger win-or-lose, and on detection
+     * docks the actor reputation. Counter-intel tech on the target shifts both odds.
+     * Mirrors {@code resolveDevelopment}/{@code resolveMarket}: the step owns its own
+     * fold rather than the per-action dispatch, so the {@code Espionage} arm of
+     * {@link #applyAction} is unreachable (kept only to keep the switch exhaustive).
+     */
+    private static GameState resolveEspionage(GameState state, List<SubmittedAction> slice,
+                                              StepContext ctx) {
+        return EspionageResolution.resolve(state, slice, ctx.seed(), ctx.tick(),
                 ctx.profile(), ctx.ledger());
     }
 
@@ -379,8 +397,15 @@ public final class Resolver {
     // dispatch switch is exhaustive and the wiring is testable. Any future spend
     // MUST go through ctx.ledger().escrow(actor, cost), never a direct Faction debit.
 
+    /**
+     * E1-13: Espionage is handled by {@link #resolveEspionage} via
+     * {@link EspionageResolution} (seeded success/detection, effects, cost escrow,
+     * reputation penalty), not through this per-action stub, so this arm is unreachable
+     * for the ESPIONAGE step. It remains only to keep the sealed-{@link Action} switch
+     * exhaustive (a new variant must still break compilation here).
+     */
     private static GameState stubEspionage(GameState s, FactionId a, Action.Espionage x, StepContext c) {
-        return s; // TODO(E1-12): seeded espionage roll; escrow Influence/Tech cost.
+        return s;
     }
 
     /**

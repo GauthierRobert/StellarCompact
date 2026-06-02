@@ -74,9 +74,26 @@ balanceProfile:
     neighbourhoodHops: ..                 # hop radius K defining a home's local neighbourhood for the balance measure (>= 0)
     qualityToleranceFraction: ..          # max relative spread of neighbourhood quality across chosen homes, in [0,1]; smaller = stricter fairness
     homeBiome: oceanic                    # cradle biome a home system must carry (the colonised home world the faction starts on)
+  espionage:                                                   # E1-13: seeded covert ops (game-design 03 C, 06 §3)
+    successBase: { scout:.., stealIntel:.., sabotage:.., inciteUnrest:.. }   # per-op base success probability [0,1]; an op absent = 0 (always fails)
+    detectionBase: { scout:.., stealIntel:.., sabotage:.., inciteUnrest:.. } # per-op base detection probability [0,1]; an op absent = 0 (never detected)
+    cost: { scout:{tech:..,influence:..}, ... }                # per-op cost (typically Tech/Influence), escrowed win-or-lose
+    counterIntelTech: intelligenceAgency                       # TechId that, when UNLOCKED by the TARGET, confers counter-intel; blank disables the mechanic
+    counterIntelSuccessPenalty: ..                             # subtracted from success odds when the target holds counterIntelTech (>= 0)
+    counterIntelDetectionBonus: ..                             # added to detection odds when the target holds counterIntelTech (>= 0)
+    stealResourceFraction: ..                                  # STEAL_INTEL fallback: fraction [0,1] of target stockpile transferred when no stealable tech exists
+    unrestPopulationLoss: ..                                   # INCITE_UNREST: population removed from the struck colony (>= 0)
+    unrestLoyaltyLoss: ..                                      # INCITE_UNREST: loyalty removed from the struck system [0,1], floored at 0
 ```
 
 **Home placement (E2-04).** A pure function of `(gameSeed, lane graph, homePlacement config)` chooses one home system per faction such that (a) every pair of homes is at least `minSeparationHops` lane hops apart, and (b) the chosen homes' neighbourhood-quality scores — colonisable build capacity + habitable cradles + resource accessibility within `neighbourhoodHops` hops — all fall inside a band of width `qualityToleranceFraction × maxChosenQuality`, so no faction is gifted a runaway start. If the galaxy cannot satisfy the request (too few cradle candidates, or no separated+balanced set exists) placement fails deterministically rather than cramming factions together. The authoritative numbers live here; the framework-free `galaxy` module receives them via a mirror `HomePlacementConfig` (it cannot depend on the engine).
+
+### Espionage resolution (E1-13)
+- Each `Espionage(target, operationType)` runs in resolution step 2, drawing one seeded generator keyed by `gameSeed ⊕ tick ⊕ opId` (`opId` = pure fn of actor/target/operation/submission-order, in `SaltDomain.ESPIONAGE`). From it: a **success** roll then a **detection** roll — deterministic per `(seed, tick, opId)`.
+- Effective success = `clamp(successBase[op] − counterIntelSuccessPenalty?, 0, 1)`; effective detection = `clamp(detectionBase[op] + counterIntelDetectionBonus?, 0, 1)`, where the `?` term applies only when the **target** has `counterIntelTech` UNLOCKED.
+- On **success**: `SCOUT` records the actor in the target faction's `revealedIntel`; `STEAL_INTEL` copies one UNLOCKED tech the actor lacks (lowest tech-id), else transfers `stealResourceFraction` of the target stockpile; `SABOTAGE` flips the first ACTIVE building in the target's territory to IDLE; `INCITE_UNREST` drops the first owned colony's population/loyalty.
+- On **detection** (independent of success): the actor's reputation drops by `diplomacy.reputation.espionageDetectedPenalty`.
+- Cost is escrowed through the tick-wide ledger **win or lose**; nothing debits a stockpile directly.
 
 ## Rules
 - Two named profiles to ship: `small-default` and `large-persistent`.

@@ -22,9 +22,9 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E1-08** Construction + tech DAG + terraform — *deps: E1-05* — game-engine-developer
 - ✅ **E1-09** Movement & interception — *deps: E1-05, E2-03* — game-engine-developer
 - ✅ **E1-10** Combat & system assault/capture/unrest — *deps: E1-05, E1-09* — game-engine-developer
-- ☐ **E1-11** Blockade & raid effects — *deps: E1-07, E1-09* — game-engine-developer
-- ☐ **E1-12** 🔒 Diplomacy: treaties/reputation/war/tribute — *deps: E1-05* — game-engine-developer
-- ☐ **E1-13** Espionage operations (seeded) — *deps: E1-05* — game-engine-developer
+- ✅ **E1-11** Blockade & raid effects — *deps: E1-07, E1-09* — game-engine-developer
+- ✅ **E1-12** 🔒 Diplomacy: treaties/reputation/war/tribute — *deps: E1-05* — game-engine-developer
+- ✅ **E1-13** Espionage operations (seeded) — *deps: E1-05* — game-engine-developer
 - ☐ **E1-14** Influence accrual & decay — *deps: E1-06, E1-12* — game-engine-developer
 - ☐ **E1-15** Victory conditions, scoring, lifecycle — *deps: E1-14* — game-balance-designer
 - ☐ **E1-16** Public event emission — *deps: E1-10, E1-12* — game-engine-developer

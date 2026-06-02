@@ -201,14 +201,14 @@ client/agent-visible read (flagged 🔒 below).
   transfers ownership and applies occupation penalty; golden battle tests.
 
 ### E1-11 · Blockade & raid effects
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-07, E1-09 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-07, E1-09 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/05-conflict.md` §5, `docs/game-design/02-economy.md` §5
 - **Do:** Blockade chokes a route/market throughput; Raid intercepts a shipment and steals part of cargo (seeded),
   no territory capture. Both gated by war/contested status.
 - **Done when:** blockade reduces throughput deterministically; raid steals a seeded cargo fraction; tests cover legality gating.
 
 ### E1-12 · Diplomacy: treaties, reputation, war, tribute
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer · 🔒
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer · 🔒
 - **Read first:** `docs/game-design/04-diplomacy.md`, `docs/game-design/03-actions.md` §B
 - **Do:** All treaty types enforced (engine **refuses** illegal actions, e.g. Attack vs NonAggression partner; **applies**
   auto-effects: allied vision, route protection, vote pooling). Reputation ledger (gains/penalties incl.
@@ -217,7 +217,7 @@ client/agent-visible read (flagged 🔒 below).
   BreakTreaty emits a galaxy-wide event + penalty; war state gates kinetic actions.
 
 ### E1-13 · Espionage operations
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-05 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/03-actions.md` §C (Espionage), `docs/game-design/06-technology.md` §3
 - **Do:** `{Scout, StealIntel, Sabotage, IncitUnrest}` with seeded success/detection; effects: reveal intel,
   steal a tech/resources, damage a building, reduce population/loyalty. Detection ⇒ reputation penalty.

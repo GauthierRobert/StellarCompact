@@ -111,10 +111,45 @@ Implemented contract (E6-01):
 ## Sovereign (agent) configuration
 
 ```
-POST /api/games/{gameId}/factions    { personaPreset|customPersona, goals, hardConstraints, modelTier } → { factionId }
-GET  /api/factions/{factionId}       → FactionConfig (owner-only sensitive fields redacted otherwise)
+POST /api/games/{gameId}/factions    { personaPreset|customPersona, goals, hardConstraints, modelTier } → 201 { factionId, gameId, seatId }
+GET  /api/factions/{factionId}       → FactionConfigView (owner-only sensitive fields redacted otherwise)
 PATCH/api/factions/{factionId}       update standing directives (between matches only for persistent galaxies)
 ```
+
+Implemented contract (E6-02 — security-sensitive, owner-only redaction):
+- **Attach** (`POST /api/games/{gameId}/factions`) creates/attaches a Sovereign config to the
+  first free seat in the match and **binds the calling principal as that seat's owner**, returning
+  `201 { factionId, gameId, seatId }`. `factionId` is the globally-unique seat handle
+  `gameId:seatId` (seat ids like `faction-1` repeat across matches, so a single path param needs to
+  embed the match). The body is `{ personaPreset|customPersona, goals[], hardConstraints[], modelTier }`:
+  `customPersona` wins over `personaPreset`; `modelTier ∈ {SMALL,MEDIUM,LARGE}` (an *orchestration*
+  tier, never a vendor/model name — principle 4) defaults to `SMALL`. Re-attaching as the **same**
+  owner updates that owner's existing seat; an unknown match is `404`; a request with no resolved
+  owner is `403`; a match with no free seat is `403`. The body is normalised once into the
+  agent-runtime `SovereignConfig` — the exact type `PromptAssembler` (E4-02) and the orchestrator
+  `LlmSeat` consume — so a configured seat **feeds prompt assembly** directly (its stored persona/
+  goals/constraints render into that seat's system prompt for its tier). Config is **never** engine
+  state and never enters the deterministic resolver (principle 1).
+- **Owner is resolved server-side, never from the body (the security crux).** The owning principal
+  is `(1)` the authenticated request `Principal`, else `(2)` the documented `X-Owner-Token` header
+  stand-in (until session auth lands), else `(3)` null = unauthenticated. The resolved name is the
+  key in the existing `FactionOwnershipRegistry` (E6-04) — one binding governs both the live
+  per-faction WS stream and this config surface. A body-supplied owner is **ignored** (a client must
+  not be able to claim a seat).
+- **Read** (`GET /api/factions/{factionId}`) returns a `FactionConfigView`. Public identity
+  (`factionId, gameId, seatId, configured`) is always present; **owner-only sensitive fields**
+  (`persona, goals[], hardConstraints[], modelTier`) are populated **only** when the requester is the
+  seat's registered owner. For a non-owner (or unauthenticated) requester the view is **redacted**:
+  `owner=false`, `persona=null`, `goals/hardConstraints=[]`, `modelTier=null` — no sensitive text is
+  ever placed into a redacted view. A non-owner read is **not** an error (the seat's public identity
+  stays discoverable); only the sensitive fields are stripped. An unknown handle is `404`.
+- **PATCH directives** (`PATCH /api/factions/{factionId}`) edits standing directives for persistent
+  galaxies. **Owner-gated** (non-owner → `403`) and **lifecycle-gated**: allowed only *between*
+  matches — a PATCH while the owning match is `RUNNING` is `409 Conflict` (mirrors the E6-01
+  lifecycle guard; re-steering mid-match would also be an unfair timing channel). PATCH semantics:
+  only present (non-null) fields are applied; the updated config feeds prompt assembly identically.
+- **Not cacheable.** Every config read carries `Cache-Control: no-store` (owner-sensitive; a shared
+  cache must never serve one principal's owner view to another — defence in depth behind redaction).
 
 ## Catalog / lookup
 

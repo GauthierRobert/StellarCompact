@@ -57,13 +57,17 @@ balanceProfile:
       penaltyUnprovokedWar: ..                             # E1-12: flat reputation hit on declaring a NEW war (idempotent re-declare is not re-penalised)
       espionageDetectedPenalty: ..
     treatyEnforcement: { ceasefire:.., nonAggression:.., tradePact:.., defensivePact:.., alliance:.., vassalage:.. }   # E1-12: per-treaty-type weight (camelCase keys = TreatyType.configKey()); used as the BreakTreaty penalty weight
-  victory:
-    domination: { systemPct: .. }
-    economic:   { influenceTarget: .., orTopForTicks: .. }
-    diplomatic: { allianceMajorityPct: .. }
-    survival:   { tickLimit: .. }
-    wonder:     { stages: .., holdTicks: .. }
-    scoreWeights: { systems:.., influence:.., economy:.., tech:.., reputation:.., military:.., centrality:.. }
+  victory:                                  # E1-15 (game-design 07); ONE primary condition selected per match
+    active: DOMINATION                       # the single primary condition checked each tick: DOMINATION|ECONOMIC|DIPLOMATIC|SURVIVAL|WONDER (default SURVIVAL when omitted)
+    conditionEnabled: true                   # master switch for the active condition; false => no victory ever fires (sandbox). Default false (omitted block = inert, hash-stable)
+    eliminationEnabled: true                 # master switch for capital-loss elimination & vassalage survival (game-design 07 §3); false => no faction eliminated. Default false
+    domination: { systemPct: .. }            # win when faction/alliance controls >= this fraction (0,1] of habitable systems
+    economic:   { influenceTarget: .., orTopForTicks: .. }   # win at >= influenceTarget Influence (orTopForTicks: the hold-top-N-ticks variant; the influence target is the snapshot-evaluable trigger)
+    diplomatic: { allianceMajorityPct: .. }  # win when a multi-member ALLIANCE controls >= this fraction (0,1] of habitable systems (shared win)
+    survival:   { tickLimit: .. }            # last faction with a capital wins; else the top-ranked survivor wins at tickLimit
+    wonder:     { stages: .., holdTicks: .. } # win on completing >= stages ACTIVE Monuments (holdTicks: the hold-N-ticks variant; completing the stages is the snapshot-evaluable trigger)
+    scoreWeights: { systems:.., influence:.., economy:.., tech:.., reputation:.., military:.., centrality:.. }   # E1-15 ranking weights (game-design 07 §2); every match produces a ranking even without a clean win
+    # The active victory condition fires for an alliance group when it qualifies; an alliance win is SHARED by the whole group (each member emits VictoryAchieved). On a win the match transitions RUNNING -> CONCLUDED (LifecycleTransitions). Elimination emits FactionEliminated; a VASSALAGE junior party is shielded from elimination.
   tick:
     intervalMs: ..            # small galaxy ~ seconds; large ~ minutes
     negotiationRounds: ..
@@ -74,6 +78,13 @@ balanceProfile:
     neighbourhoodHops: ..                 # hop radius K defining a home's local neighbourhood for the balance measure (>= 0)
     qualityToleranceFraction: ..          # max relative spread of neighbourhood quality across chosen homes, in [0,1]; smaller = stricter fairness
     homeBiome: oceanic                    # cradle biome a home system must carry (the colonised home world the faction starts on)
+  influence:                                # E1-14: Influence accrual & decay (game-design 02 §1,§5,§7)
+    perCapitalSystem: ..                     # flat Influence per owned (capital/home) system per tick (>= 0)
+    perMonument: ..                          # flat Influence per active Monument building per tick (>= 0)
+    perTradeVolume: ..                       # Influence per unit of an owned ACTIVE route's per-tick throughput (>= 0); a BLOCKADED route's volume is scaled by (1 - market.blockadeThroughputFactor); SUSPENDED earns nothing
+    perActiveTreaty: ..                      # flat Influence per ACTIVE treaty the faction signs (honoured diplomacy) (>= 0)
+    decayRate: ..                            # fraction [0,1] the post-accrual Influence stockpile bleeds each tick (0 = no decay)
+    # Influence is political capital: NEVER hauled on a route nor matched on the market order book (it is granted via treaty terms only). The INFLUENCE step accrues/decays it directly on the faction stockpile, not via the SpendLedger.
   espionage:                                                   # E1-13: seeded covert ops (game-design 03 C, 06 §3)
     successBase: { scout:.., stealIntel:.., sabotage:.., inciteUnrest:.. }   # per-op base success probability [0,1]; an op absent = 0 (always fails)
     detectionBase: { scout:.., stealIntel:.., sabotage:.., inciteUnrest:.. } # per-op base detection probability [0,1]; an op absent = 0 (never detected)

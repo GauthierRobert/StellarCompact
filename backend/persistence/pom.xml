@@ -27,12 +27,50 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
+            <!--
+              Compile scope: the E5-02 active-set repositories (JdbcClient) need only
+              the JDBC API at compile time, but the round-trip Testcontainers test
+              constructs a PGSimpleDataSource directly, which requires the driver on
+              the (test) compile classpath, so it cannot be runtime-only.
+            -->
+        </dependency>
+
+        <!--
+          Flyway owns the schema. flyway-core runs the versioned V*.sql migrations
+          under src/main/resources/db/migration; flyway-database-postgresql is the
+          Postgres-specific support module Flyway 11 requires for the postgresql
+          dialect. Versions are managed by the Spring Boot BOM in the parent reactor.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          Testcontainers spins up a real PostgreSQL in Docker so the migration
+          test applies V*.sql against the actual database the app targets and then
+          inspects the resulting catalog. testcontainers-postgresql/-junit-jupiter
+          are the Testcontainers 2.x coordinates; versions are managed by the
+          testcontainers-bom imported transitively via the Spring Boot BOM.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

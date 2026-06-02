@@ -44,21 +44,51 @@ public record BalanceProfile(
         // --- E2-04 home placement (append-only; see HomePlacement record below) ---
         HomePlacement homePlacement,
         // --- E1-13 espionage (append-only; see Espionage record below) ---
-        Espionage espionage
+        Espionage espionage,
+        // --- E1-14 influence accrual & decay (append-only; see Influence record below) ---
+        Influence influence
 ) {
 
     /**
-     * Compact constructor. Movement (E1-09), home placement (E2-04) and espionage
-     * (E1-13) are all additive; a profile (or fixture) that omits any of them gets the
-     * inert defaults ({@link Movement#defaults()} = free travel/interception off,
-     * {@link HomePlacement#defaults()}, {@link Espionage#defaults()} = ops always
-     * fail / are never detected) so it stays loadable and deterministic
-     * (forward-compatible, like the tech DAG / terraform chain defaults).
+     * Compact constructor. Movement (E1-09), home placement (E2-04), espionage
+     * (E1-13) and influence (E1-14) are all additive; a profile (or fixture) that omits
+     * any of them gets the inert defaults ({@link Movement#defaults()} = free
+     * travel/interception off, {@link HomePlacement#defaults()},
+     * {@link Espionage#defaults()} = ops always fail / are never detected,
+     * {@link Influence#defaults()} = no accrual, no decay) so it stays loadable and
+     * deterministic (forward-compatible, like the tech DAG / terraform chain defaults).
      */
     public BalanceProfile {
         movement = movement == null ? Movement.defaults() : movement;
         homePlacement = homePlacement == null ? HomePlacement.defaults() : homePlacement;
         espionage = espionage == null ? Espionage.defaults() : espionage;
+        influence = influence == null ? Influence.defaults() : influence;
+    }
+
+    /**
+     * Backwards-compatible constructor through {@code espionage} (no E1-14
+     * {@code influence} block): delegates to the canonical constructor with
+     * {@link Influence#defaults()}. Lets pre-E1-14 fixtures that build a profile
+     * positionally (through {@code espionage}) keep compiling unchanged.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick,
+            HomePlacement homePlacement,
+            Espionage espionage) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, homePlacement, espionage,
+                Influence.defaults());
     }
 
     /**
@@ -472,8 +502,34 @@ public record BalanceProfile(
     ) {
     }
 
-    /** The five victory conditions plus ranking weights. */
+    /**
+     * The five victory conditions, the one selected for this match, the win/lifecycle
+     * switches, plus the ranking weights (E1-15; game-design 07).
+     *
+     * <p><b>The active condition (game-design 07 section 1: "one selected per match").</b>
+     * {@code active} names the single primary victory condition the
+     * {@code VictoryEvaluation} step checks each tick; the other four condition records
+     * carry their thresholds so a profile is fully tunable, but only {@code active}'s
+     * threshold can win the match. {@code active} defaults to {@link VictoryKind#SURVIVAL}
+     * (the always-reachable tick-limit fallback) when a profile omits it.
+     *
+     * <p><b>Switches (forward-compatible, both default OFF).</b>
+     * <ul>
+     *   <li>{@code conditionEnabled} - master switch for the active victory condition. When
+     *       {@code false} (the inert default) no condition ever fires (a never-ending /
+     *       sandbox match); a real match turns it on. Keeping it off by default means a
+     *       legacy fixture/profile that omits the E1-15 block resolves exactly as before
+     *       (no spurious CONCLUDED transition).</li>
+     *   <li>{@code eliminationEnabled} - master switch for capital-loss elimination and
+     *       vassalage survival (game-design 07 section 3). When {@code false} (the inert
+     *       default) no faction is ever eliminated; a real match turns it on. Off by
+     *       default for the same byte-identity reason.</li>
+     * </ul>
+     */
     public record Victory(
+            VictoryKind active,
+            boolean conditionEnabled,
+            boolean eliminationEnabled,
             Domination domination,
             Economic economic,
             Diplomatic diplomatic,
@@ -481,6 +537,49 @@ public record BalanceProfile(
             Wonder wonder,
             ScoreWeights scoreWeights
     ) {
+        /**
+         * Compact constructor defaulting the E1-15 {@code active} selector to
+         * {@link VictoryKind#SURVIVAL} when a profile omits it (the always-reachable
+         * tick-limit fallback). The two boolean switches are primitives that default to
+         * {@code false} (both OFF) for older positional callers via the delegating
+         * constructor below.
+         */
+        public Victory {
+            active = active == null ? VictoryKind.SURVIVAL : active;
+        }
+
+        /**
+         * Backwards-compatible six-arg constructor predating the E1-15 {@code active}
+         * selector and the two switches: delegates with {@link VictoryKind#SURVIVAL}
+         * active and both switches OFF. Lets pre-E1-15 fixtures/profiles that build a
+         * Victory positionally (the five condition records + score weights) keep
+         * compiling unchanged, and - critically - keeps victory/elimination evaluation
+         * inert for them so the golden state hash is unperturbed.
+         */
+        public Victory(Domination domination, Economic economic, Diplomatic diplomatic,
+                       Survival survival, Wonder wonder, ScoreWeights scoreWeights) {
+            this(VictoryKind.SURVIVAL, false, false,
+                    domination, economic, diplomatic, survival, wonder, scoreWeights);
+        }
+    }
+
+    /**
+     * The closed set of primary victory conditions (game-design 07 section 1). Exactly
+     * one is the match's {@link Victory#active} condition; it names which threshold the
+     * {@code VictoryEvaluation} step checks each tick. Kept in the config module (not the
+     * state module) because it is a tunable profile selector, not per-tick game state.
+     */
+    public enum VictoryKind {
+        /** Control >= {@code domination.systemPct} of habitable systems. */
+        DOMINATION,
+        /** Reach {@code economic.influenceTarget} Influence (or hold top for N ticks). */
+        ECONOMIC,
+        /** Lead an alliance controlling {@code diplomatic.allianceMajorityPct} of systems. */
+        DIPLOMATIC,
+        /** Be the last faction with a capital, or survive to {@code survival.tickLimit}. */
+        SURVIVAL,
+        /** Complete and hold a galaxy Wonder for {@code wonder.holdTicks} ticks. */
+        WONDER
     }
 
     /** Fraction (0..1) of habitable systems required to win. */
@@ -643,6 +742,82 @@ public record BalanceProfile(
          */
         public static Espionage defaults() {
             return new Espionage(Map.of(), Map.of(), Map.of(), "", 0.0, 0.0, 0.0, 0, 0.0);
+        }
+    }
+
+    /**
+     * Influence accrual &amp; decay tunables (E1-14; game-design 02 section 1, 5, 7).
+     * Influence is the political-capital resource: it is <em>never</em> hauled along a
+     * route nor market-traded (game-design 02 section 1 - it can only be granted via a
+     * treaty term, not sold) - this step only accrues it from behaviour and decays it.
+     * Every number the INFLUENCE step applies reads from here; nothing is hardcoded
+     * in {@code InfluenceResolution} (rule 6).
+     *
+     * <p>The four documented accrual sources (game-design 02 section 1/7: "Influence
+     * accrues from capitals, trade volume, monuments and honoured diplomacy"):
+     * <ul>
+     *   <li>{@code perCapitalSystem} - flat Influence per owned home/capital system per
+     *       tick. The home/capital is modelled as a system carrying an active
+     *       {@link com.stellarcompact.engine.state.BuildingType#MONUMENT} is NOT the
+     *       capital marker; capitals are every owned system in this minimal model (the
+     *       soft-power base of holding territory). A {@code 0.0} disables it.</li>
+     *   <li>{@code perMonument} - flat Influence per active
+     *       {@link com.stellarcompact.engine.state.BuildingType#MONUMENT} the faction
+     *       holds (the prestige building's ongoing Influence, on top of any biome yield
+     *       the production step already credits). A {@code 0.0} disables it.</li>
+     *   <li>{@code perTradeVolume} - Influence per unit of per-tick throughput of each
+     *       ACTIVE route the faction owns (commerce builds soft power, game-design 02
+     *       section 5). A BLOCKADED route's throughput is scaled by
+     *       {@code (1 - market.blockadeThroughputFactor)} so a choked route earns less.
+     *       A {@code 0.0} disables it.</li>
+     *   <li>{@code perActiveTreaty} - flat Influence per ACTIVE treaty the faction is a
+     *       signatory to (honoured diplomacy - standing agreements project prestige).
+     *       A {@code 0.0} disables it.</li>
+     * </ul>
+     *
+     * <p>Decay (game-design 02 section 7 - Influence is a soft, behaviour-tied currency,
+     * not a hoard): after accrual, the faction's Influence stockpile is multiplied by
+     * {@code (1 - decayRate)} each tick, so an idle faction's influence bleeds toward
+     * zero and only sustained behaviour keeps it high. {@code decayRate} is a fraction
+     * in {@code [0,1]} ({@code 0.0} = no decay, the inert default).
+     */
+    public record Influence(
+            double perCapitalSystem,
+            double perMonument,
+            double perTradeVolume,
+            double perActiveTreaty,
+            double decayRate
+    ) {
+        /**
+         * Compact constructor clamping {@code decayRate} into {@code [0,1]} so a malformed
+         * profile cannot amplify (a rate &gt; 1 would flip the sign) nor un-decay (negative).
+         * Accrual rates are left as-authored (a designer may want any non-negative value);
+         * a negative accrual is clamped to {@code 0.0} so influence can never be drained by
+         * a source.
+         */
+        public Influence {
+            perCapitalSystem = nonNegative(perCapitalSystem);
+            perMonument = nonNegative(perMonument);
+            perTradeVolume = nonNegative(perTradeVolume);
+            perActiveTreaty = nonNegative(perActiveTreaty);
+            if (decayRate < 0.0) {
+                decayRate = 0.0;
+            } else if (decayRate > 1.0) {
+                decayRate = 1.0;
+            }
+        }
+
+        private static double nonNegative(double v) {
+            return v < 0.0 ? 0.0 : v;
+        }
+
+        /**
+         * Inert defaults for a profile that omits the E1-14 block: no accrual from any
+         * source and no decay. A match that wants the influence economy supplies the block
+         * (the shipped {@code small-default} / {@code large-persistent} profiles do).
+         */
+        public static Influence defaults() {
+            return new Influence(0.0, 0.0, 0.0, 0.0, 0.0);
         }
     }
 }

@@ -135,6 +135,9 @@ public final class BalanceProfileLoader {
 
         // victory
         BalanceProfile.Victory v = req(p.victory(), "victory");
+        // E1-15: the selected primary condition. Defaulted to SURVIVAL by the record when
+        // absent, so it is never null here; assert presence defensively.
+        require(v.active() != null, "victory.active must name a condition");
         require(pct(req(v.domination(), "victory.domination").systemPct()),
                 "victory.domination.systemPct must be in (0,1]");
         BalanceProfile.Economic eco = req(v.economic(), "victory.economic");

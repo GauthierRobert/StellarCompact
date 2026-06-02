@@ -75,6 +75,21 @@ public final class Resolver {
     }
 
     /**
+     * Resolve one tick AND collect the tick's public events (board card E1-16). Same
+     * deterministic resolution as {@link #resolve(GameState, List, BalanceProfile, long)}
+     * but returns the next snapshot bundled with the ordered {@link PublicEvent} list in
+     * a {@link ResolveResult}. Events are transient per-tick output (not part of the
+     * hashed {@link GameState}); the bare-{@code GameState} {@code resolve} overloads
+     * remain for callers that do not consume the live event stream.
+     *
+     * @return the next snapshot plus its deterministically-ordered public events
+     */
+    public static ResolveResult resolveResult(GameState state, List<SubmittedAction> validatedActions,
+                                              BalanceProfile profile, long seed) {
+        return resolveResult(state, validatedActions, profile, seed, LaneNetwork.EMPTY);
+    }
+
+    /**
      * Resolve one tick with an explicit {@link LaneNetwork} (E1-09). The network is
      * the static-per-match lane graph the MOVEMENT step needs to compute travel ETAs,
      * advance fleets and detect interception; it is passed alongside the profile
@@ -86,6 +101,20 @@ public final class Resolver {
      */
     public static GameState resolve(GameState state, List<SubmittedAction> validatedActions,
                                     BalanceProfile profile, long seed, LaneNetwork network) {
+        return resolveResult(state, validatedActions, profile, seed, network).state();
+    }
+
+    /**
+     * Resolve one tick with an explicit {@link LaneNetwork} AND collect the tick's public
+     * events (board card E1-16). This is the single core implementation; the
+     * bare-{@code GameState} {@link #resolve(GameState, List, BalanceProfile, long, LaneNetwork)}
+     * overload simply returns {@code resolveResult(...).state()}.
+     *
+     * @param network the active-region lane graph (never {@code null}; use {@code EMPTY})
+     * @return the next snapshot plus its deterministically-ordered public events
+     */
+    public static ResolveResult resolveResult(GameState state, List<SubmittedAction> validatedActions,
+                                              BalanceProfile profile, long seed, LaneNetwork network) {
         if (state == null) {
             throw new IllegalArgumentException("resolve: state must be set");
         }
@@ -116,7 +145,13 @@ public final class Resolver {
         // Battles interception triggers in MOVEMENT, handed to COMBAT (E1-10). Mutable
         // scratch local to this single-threaded resolve; never shared.
         List<PendingBattle> pendingBattles = new ArrayList<>();
-        StepContext ctx = new StepContext(profile, seed, state.tick(), ledger, network, pendingBattles);
+        // The per-tick public-event collector (E1-16). Steps append in fixed step order
+        // (each over its already-canonically-ordered slice), so the accumulation is
+        // deterministic; the EVENTS step emits it. Mutable scratch local to this single
+        // resolve, never shared across threads (resolution is single-threaded).
+        List<PublicEvent> events = new ArrayList<>();
+        StepContext ctx = new StepContext(profile, seed, state.tick(), ledger, network,
+                pendingBattles, events);
 
         // 2. Walk the eleven fixed resolution steps in declaration order. Each step
         //    consumes exactly the ordered slice of actions assigned to it.
@@ -127,7 +162,8 @@ public final class Resolver {
         }
 
         // 3. Single authoritative debit pass: apply all escrowed spends atomically.
-        return settleSpends(next, ledger);
+        GameState settled = settleSpends(next, ledger);
+        return new ResolveResult(settled, events);
     }
 
     /** The already-ordered slice of actions belonging to one step. */
@@ -226,9 +262,11 @@ public final class Resolver {
                                            StepContext ctx) {
         GameState next = state;
         for (PendingBattle pb : ctx.pendingBattles()) {
-            next = CombatResolution.resolveInterception(next, pb, ctx.seed(), ctx.tick(), ctx.profile());
+            next = CombatResolution.resolveInterception(next, pb, ctx.seed(), ctx.tick(),
+                    ctx.profile(), ctx.events());
         }
-        return CombatResolution.resolve(next, slice, ctx.seed(), ctx.tick(), ctx.profile());
+        return CombatResolution.resolve(next, slice, ctx.seed(), ctx.tick(), ctx.profile(),
+                ctx.events());
     }
 
     /**
@@ -247,7 +285,7 @@ public final class Resolver {
     private static GameState resolveInterdiction(GameState state, List<SubmittedAction> slice,
                                                  StepContext ctx) {
         return InterdictionResolution.resolve(state, slice, ctx.seed(), ctx.tick(),
-                ctx.profile(), ctx.ledger());
+                ctx.profile(), ctx.ledger(), ctx.events());
     }
 
     /**
@@ -279,7 +317,8 @@ public final class Resolver {
      */
     private static GameState resolveDiplomacy(GameState state, List<SubmittedAction> slice,
                                               StepContext ctx) {
-        return DiplomacyResolution.resolve(state, slice, ctx.tick(), ctx.profile(), ctx.ledger());
+        return DiplomacyResolution.resolve(state, slice, ctx.tick(), ctx.profile(), ctx.ledger(),
+                ctx.events());
     }
 
     /**
@@ -491,7 +530,14 @@ public final class Resolver {
     }
 
     private static GameState stubEstablishRoute(GameState s, FactionId a, Action.EstablishRoute x, StepContext c) {
-        return s; // TODO(E1-07): create recurring route; reserve logistics capacity.
+        // TODO(E1-07): create recurring route; reserve logistics capacity. The route
+        // object is not yet materialised, but the validated EstablishRoute action IS a
+        // public, galaxy-wide fact (the route is visible on the map - economy 02 §5), so
+        // E1-16 emits the announcement here, derived deterministically from the action
+        // (owner = actor, endpoint = systemA). When E1-07 lands the route this stays the
+        // single emission site.
+        c.events().add(new PublicEvent.RouteEstablished(a, x.systemA(), c.tick()));
+        return s;
     }
 
     private static GameState stubColonize(GameState s, FactionId a, Action.Colonize x, StepContext c) {
@@ -523,12 +569,46 @@ public final class Resolver {
         return EconomyResolution.resolve(s, c.profile(), c.ledger());
     }
 
+    /**
+     * The INFLUENCE step (E1-14; game-design 02 sections 1,5,7). Delegates to
+     * {@link InfluenceResolution}: accrues Influence from the four documented sources
+     * (owned capitals, active monuments, owned-route trade volume, honoured ACTIVE
+     * treaties) and applies the configured proportional decay, writing the new Influence
+     * directly onto each faction stockpile (copy-on-write). Influence is political
+     * capital - never haulable nor market-traded - so it does NOT route through the
+     * {@link SpendLedger}; the four physical resources are left untouched here.
+     */
     private static GameState resolveInfluence(GameState s, StepContext c) {
-        return s; // TODO(E1-13): Influence accrual and decay.
+        return InfluenceResolution.resolve(s, c.profile());
     }
 
+    /**
+     * The EVENTS step (E1-16; game-design 03 step 11 - the final resolution slot). The
+     * galaxy-wide public events are <em>recorded</em> by the steps that produced them
+     * (diplomacy -&gt; War/Treaty/Alliance; combat -&gt; Battle/SystemCaptured;
+     * interdiction -&gt; RouteRaided; market -&gt; RouteEstablished) into
+     * {@code ctx.events()} during this same tick, in the fixed step order over each
+     * step's already-canonically-ordered slice. By the time this final step runs the
+     * collector therefore already holds the tick's events in a deterministic,
+     * append-only order; the {@link ResolveResult} returns them. This step makes no state
+     * change (public events are transient per-tick output, never part of the hashed
+     * snapshot) - it is the contract anchor for the emission slot.
+     *
+     * <p><b>Victory / elimination evaluation (E1-15).</b> Before this final emission slot
+     * settles, the passive {@link VictoryEvaluation#evaluate} pass runs here: it appends
+     * {@code FactionEliminated} for every faction that lost its last system (and is not a
+     * protected vassal) and, if the configured {@code victory.active} condition fired this
+     * tick, appends {@code VictoryAchieved} and transitions the snapshot RUNNING -&gt;
+     * CONCLUDED (the only state change this step makes). Wiring it here - the fixed final
+     * step over the already-resolved snapshot - means those events emit on the same tick as
+     * the state that triggered them, in deterministic order, and the long-dormant
+     * {@code FactionEliminated}/{@code VictoryAchieved} variants are now live. Both passes
+     * are gated by config switches ({@code conditionEnabled}/{@code eliminationEnabled});
+     * a profile with both off (the inert default) leaves this step a pure no-op, exactly
+     * as before E1-15.
+     */
     private static GameState resolveEvents(GameState s, StepContext c) {
-        return s; // TODO(E1-14): emit the tick public events for the WorldView feed.
+        return VictoryEvaluation.evaluate(s, c.profile(), c.events());
     }
 
     /**
@@ -538,7 +618,8 @@ public final class Resolver {
      * seam. One record keeps handler signatures stable as bodies land in later cards.
      */
     record StepContext(BalanceProfile profile, long seed, long tick, SpendLedger ledger,
-                       LaneNetwork network, List<PendingBattle> pendingBattles) {
+                       LaneNetwork network, List<PendingBattle> pendingBattles,
+                       List<PublicEvent> events) {
         StepContext {
             if (profile == null) {
                 throw new IllegalArgumentException("StepContext.profile must be set");
@@ -551,6 +632,9 @@ public final class Resolver {
             }
             if (pendingBattles == null) {
                 throw new IllegalArgumentException("StepContext.pendingBattles must be set");
+            }
+            if (events == null) {
+                throw new IllegalArgumentException("StepContext.events must be set");
             }
         }
     }

@@ -101,6 +101,30 @@ public record GameState(
                 factions, next, fleets, treaties, routes, marketOrders, wars);
     }
 
+    /**
+     * Copy-on-write: a new snapshot with the system identified by {@code id}
+     * removed from the active set, every other collection shared structurally.
+     * Mirrors {@link #withSystem(ActiveSystem)} (defensive copy of the systems map,
+     * share everything else) but in the removal direction.
+     *
+     * <p>This is the demotion seam of the promotion/demotion boundary (E2-05):
+     * abandoning a system deletes its active row, reverting the star to pure
+     * procedural scenery regenerable from the seed alone. Removing the only
+     * {@link ActiveSystem} that referenced its planets/buildings leaves no orphan
+     * rows because those records are owned by (nested inside) the
+     * {@code ActiveSystem} value - dropping the system drops them with it.
+     * Removing an absent id is a no-op (returns an equal snapshot).
+     */
+    public GameState withoutSystem(SystemId id) {
+        if (!systems.containsKey(id)) {
+            return this;
+        }
+        Map<SystemId, ActiveSystem> next = new LinkedHashMap<>(systems);
+        next.remove(id);
+        return new GameState(gameSeed, tick, status, balanceProfileName, balanceProfileVersion,
+                factions, next, fleets, treaties, routes, marketOrders, wars);
+    }
+
     /** Copy-on-write: a new snapshot with {@code fleet} inserted/replaced by its id. */
     public GameState withFleet(Fleet fleet) {
         Map<FleetId, Fleet> next = new LinkedHashMap<>(fleets);

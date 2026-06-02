@@ -23,6 +23,17 @@
             <groupId>com.stellarcompact</groupId>
             <artifactId>engine</artifactId>
         </dependency>
+        <!--
+          E6-03: the tile endpoints generate immutable, procedural scenery on
+          demand from the seed via the galaxy module's pure generators
+          (com.stellarcompact.galaxy.gen.*). Read-only at the code level: the api
+          calls the generators, never modifies them. Version is managed by the
+          parent reactor's dependencyManagement.
+        -->
+        <dependency>
+            <groupId>com.stellarcompact</groupId>
+            <artifactId>galaxy</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

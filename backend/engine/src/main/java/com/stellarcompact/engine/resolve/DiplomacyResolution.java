@@ -75,23 +75,25 @@ final class DiplomacyResolution {
      * @return the snapshot after the diplomatic-state effects
      */
     static GameState resolve(GameState state, List<SubmittedAction> slice, long tick,
-                             BalanceProfile profile, SpendLedger ledger) {
+                             BalanceProfile profile, SpendLedger ledger,
+                             List<PublicEvent> events) {
         GameState next = state;
         for (SubmittedAction sa : slice) {
-            next = apply(next, sa, tick, profile, ledger);
+            next = apply(next, sa, tick, profile, ledger, events);
         }
         return next;
     }
 
     private static GameState apply(GameState state, SubmittedAction sa, long tick,
-                                   BalanceProfile profile, SpendLedger ledger) {
+                                   BalanceProfile profile, SpendLedger ledger,
+                                   List<PublicEvent> events) {
         FactionId actor = sa.actor();
         return switch (sa.action()) {
             case Action.ProposeTreaty a -> proposeTreaty(state, actor, a, tick, sa.submissionOrder());
-            case Action.AcceptTreaty a -> acceptTreaty(state, a);
+            case Action.AcceptTreaty a -> acceptTreaty(state, a, tick, events);
             case Action.DeclineTreaty a -> declineTreaty(state, a);
-            case Action.BreakTreaty a -> breakTreaty(state, actor, a, tick, profile);
-            case Action.DeclareWar a -> declareWar(state, actor, a, tick, profile);
+            case Action.BreakTreaty a -> breakTreaty(state, actor, a, tick, profile, events);
+            case Action.DeclareWar a -> declareWar(state, actor, a, tick, profile, events);
             case Action.Tribute a -> tribute(state, actor, a, ledger);
             // The slice only ever contains the DIPLOMATIC_STATE-category actions above
             // (the resolver grouped by step); any other action reaching here would be a
@@ -112,10 +114,18 @@ final class DiplomacyResolution {
         return state.withTreaty(treaty);
     }
 
-    private static GameState acceptTreaty(GameState state, Action.AcceptTreaty a) {
+    private static GameState acceptTreaty(GameState state, Action.AcceptTreaty a, long tick,
+                                          List<PublicEvent> events) {
         Treaty treaty = state.treaties().get(a.treatyId());
         if (treaty == null || treaty.status() != TreatyStatus.PROPOSED) {
             return state; // validator guarantees this, but stay defensive (pure no-op)
+        }
+        // E1-16: accepting a treaty is announced galaxy-wide (game-design 03/04). Every
+        // signed treaty emits TreatySigned; an Alliance additionally emits AllianceFormed
+        // (the WS spec lists them as distinct kinds, so a formed alliance surfaces both).
+        events.add(new PublicEvent.TreatySigned(treaty.parties(), tick));
+        if (treaty.type() == TreatyType.ALLIANCE) {
+            events.add(new PublicEvent.AllianceFormed(treaty.parties(), tick));
         }
         return state.withTreaty(treaty.withStatus(TreatyStatus.ACTIVE));
     }
@@ -131,7 +141,8 @@ final class DiplomacyResolution {
     }
 
     private static GameState breakTreaty(GameState state, FactionId actor,
-                                         Action.BreakTreaty a, long tick, BalanceProfile profile) {
+                                         Action.BreakTreaty a, long tick, BalanceProfile profile,
+                                         List<PublicEvent> events) {
         Treaty treaty = state.treaties().get(a.treatyId());
         if (treaty == null || treaty.status() != TreatyStatus.ACTIVE) {
             return state;
@@ -142,24 +153,27 @@ final class DiplomacyResolution {
         long remaining = Math.max(0L, treaty.expiresTick() - tick);
         double penalty = profile.diplomacy().reputation().penaltyBreakTreaty() * weight * remaining;
         next = adjustReputation(next, actor, -penalty);
-        // TODO(E1-16): emit a galaxy-wide "treaty broken" public event for the WorldView
-        // feed once the EVENTS step has an event-emission seam. State (BROKEN treaty) is
-        // recorded here; no event system is invented by this card.
+        // E1-16: BreakTreaty is announced galaxy-wide (game-design 04 §5). Parties are the
+        // treaty's signatories (the breaker is the actor, among them).
+        events.add(new PublicEvent.TreatyBroken(treaty.parties(), tick));
         return next;
     }
 
     // ===== war declaration =====================================================
 
     private static GameState declareWar(GameState state, FactionId actor,
-                                        Action.DeclareWar a, long tick, BalanceProfile profile) {
+                                        Action.DeclareWar a, long tick, BalanceProfile profile,
+                                        List<PublicEvent> events) {
         if (state.atWar(actor, a.target())) {
             return state; // idempotent: an existing war is neither re-recorded nor re-penalised
         }
         GameState next = state.withWar(actor, a.target(), tick);
         double penalty = profile.diplomacy().reputation().penaltyUnprovokedWar();
         next = adjustReputation(next, actor, -penalty);
-        // TODO(E1-16): emit a galaxy-wide "war declared" public event once the EVENTS
-        // step has an emission seam. The WarState is recorded here.
+        // E1-16: a new war is announced galaxy-wide (parties = [declarer, target]). Only a
+        // genuinely new war emits - an idempotent re-declare returned above, so no
+        // duplicate event.
+        events.add(new PublicEvent.WarDeclared(actor, a.target(), tick));
         return next;
     }
 

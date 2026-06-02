@@ -252,8 +252,11 @@ class EspionageResolutionTest {
                 List.of(submit(EspionageOperation.SCOUT)), profile, SEED);
 
         BalanceProfile.ResourceBundle cost = profile.espionage().cost().get("scout");
-        // SPY had rich() = 1000 influence; the scout cost is debited at settlement.
-        double expectedInfluence = 1000 - cost.influence();
+        // SPY had rich() = 1000 influence and owns no system, so the E1-14 INFLUENCE
+        // step accrues nothing and applies the profile's proportional decay before the
+        // scout cost is debited at settlement: (1000 x (1 - decayRate)) - scoutInfluence.
+        double decayed = 1000 * (1 - profile.influence().decayRate());
+        double expectedInfluence = decayed - cost.influence();
         assertEquals(expectedInfluence, next.factions().get(SPY).stockpiles().influence(), 1e-6);
     }
 

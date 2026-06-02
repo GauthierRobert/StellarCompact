@@ -85,11 +85,12 @@ final class CombatResolution {
      * so it is only {@link Action.Attack}, but the guard keeps this total).
      */
     static GameState resolve(GameState state, List<SubmittedAction> attackSlice,
-                             long gameSeed, long tick, BalanceProfile profile) {
+                             long gameSeed, long tick, BalanceProfile profile,
+                             List<PublicEvent> events) {
         GameState next = state;
         for (SubmittedAction sa : attackSlice) {
             if (sa.action() instanceof Action.Attack attack) {
-                next = resolveAttack(next, sa.actor(), attack, gameSeed, tick, profile);
+                next = resolveAttack(next, sa.actor(), attack, gameSeed, tick, profile, events);
             }
         }
         return next;
@@ -106,7 +107,8 @@ final class CombatResolution {
      * assault.
      */
     static GameState resolveInterception(GameState state, PendingBattle pb,
-                                         long gameSeed, long tick, BalanceProfile profile) {
+                                         long gameSeed, long tick, BalanceProfile profile,
+                                         List<PublicEvent> events) {
         Fleet attacker = state.fleets().get(pb.movingFleet());
         Fleet defender = state.fleets().get(pb.interceptor());
         if (attacker == null || defender == null) {
@@ -118,26 +120,32 @@ final class CombatResolution {
         boolean attackerWins = decide(attackPower, defendPower, gameSeed, tick, pb.battleId(), c);
         Fleet newAttacker = applyLosses(attacker, attackerWins ? c.lossFractionWinner() : c.lossFractionLoser());
         Fleet newDefender = applyLosses(defender, attackerWins ? c.lossFractionLoser() : c.lossFractionWinner());
+        // E1-16: an interception is a fought battle - announce it (parties = [mover,
+        // interceptor]; no system, it is a mid-transit lane clash).
+        events.add(new PublicEvent.BattleResolved(attacker.owner(), defender.owner(),
+                Optional.empty(), tick));
         return state.withFleet(newAttacker).withFleet(newDefender);
     }
 
     // ===== one Attack action ==================================================
 
     private static GameState resolveAttack(GameState state, FactionId actor, Action.Attack a,
-                                           long gameSeed, long tick, BalanceProfile profile) {
+                                           long gameSeed, long tick, BalanceProfile profile,
+                                           List<PublicEvent> events) {
         Fleet attacker = state.fleets().get(a.fleet());
         if (attacker == null || !actor.equals(attacker.owner())) {
             return state; // belt-and-braces: validator already enforces ownership/existence
         }
         return switch (a.target()) {
-            case AttackTarget.OnFleet t -> resolveFleetAttack(state, attacker, t, gameSeed, tick, profile);
-            case AttackTarget.OnSystem t -> resolveSystemAssault(state, attacker, t, gameSeed, tick, profile);
+            case AttackTarget.OnFleet t -> resolveFleetAttack(state, attacker, t, gameSeed, tick, profile, events);
+            case AttackTarget.OnSystem t -> resolveSystemAssault(state, attacker, t, gameSeed, tick, profile, events);
         };
     }
 
     /** Fleet-vs-fleet engagement: both stacks take proportional losses. */
     private static GameState resolveFleetAttack(GameState state, Fleet attacker, AttackTarget.OnFleet t,
-                                                long gameSeed, long tick, BalanceProfile profile) {
+                                                long gameSeed, long tick, BalanceProfile profile,
+                                                List<PublicEvent> events) {
         Fleet defender = state.fleets().get(t.fleet());
         if (defender == null) {
             return state;
@@ -150,6 +158,9 @@ final class CombatResolution {
 
         Fleet newAttacker = applyLosses(attacker, attackerWins ? c.lossFractionWinner() : c.lossFractionLoser());
         Fleet newDefender = applyLosses(defender, attackerWins ? c.lossFractionLoser() : c.lossFractionWinner());
+        // E1-16: a chosen fleet-vs-fleet engagement (no system; parties = [attacker, defender]).
+        events.add(new PublicEvent.BattleResolved(attacker.owner(), defender.owner(),
+                Optional.empty(), tick));
         return state.withFleet(newAttacker).withFleet(newDefender);
     }
 
@@ -162,7 +173,8 @@ final class CombatResolution {
      * losses either way.
      */
     private static GameState resolveSystemAssault(GameState state, Fleet attacker, AttackTarget.OnSystem t,
-                                                  long gameSeed, long tick, BalanceProfile profile) {
+                                                  long gameSeed, long tick, BalanceProfile profile,
+                                                  List<PublicEvent> events) {
         ActiveSystem system = state.systems().get(t.system());
         if (system == null) {
             return state;
@@ -190,6 +202,15 @@ final class CombatResolution {
                     applyLosses(g, attackerWins ? c.lossFractionLoser() : c.lossFractionWinner()));
         }
 
+        // E1-16: a system assault is a fought battle, announced with its system. When the
+        // system is owned, the defender of record is its owner; an unowned (neutral)
+        // system has no defending faction, so the attacker is recorded as both parties'
+        // reference point only when there is a genuine defender.
+        if (defenderOwner != null) {
+            events.add(new PublicEvent.BattleResolved(attacker.owner(), defenderOwner,
+                    Optional.of(system.id()), tick));
+        }
+
         if (!attackerWins) {
             return next; // assault repelled: ownership and loyalty unchanged
         }
@@ -202,6 +223,8 @@ final class CombatResolution {
         double newLoyalty = Math.max(0.0, system.loyalty() - c.occupationLoyaltyPenalty());
         ActiveSystem captured = new ActiveSystem(system.id(), system.name(), system.coords(),
                 Optional.of(attacker.owner()), system.planets(), system.population(), newLoyalty);
+        // E1-16: a captured system is announced galaxy-wide (parties = [newOwner], system set).
+        events.add(new PublicEvent.SystemCaptured(attacker.owner(), system.id(), tick));
         return next.withSystem(captured);
     }
 

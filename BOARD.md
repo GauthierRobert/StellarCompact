@@ -224,13 +224,13 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** outcomes deterministic per seed; counter-intel tech affects odds; detected ops cost reputation.
 
 ### E1-14 · Influence accrual & decay
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-06, E1-12 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-06, E1-12 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/game-design/02-economy.md` §1, §7
 - **Do:** Influence from capitals, trade volume, monuments, honoured diplomacy; decay rules. Not haulable, not market-traded.
 - **Done when:** influence accrues from the documented sources per config; decay applied; tested.
 
 ### E1-15 · Victory conditions, scoring, lifecycle
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-14 · **Delegate to:** game-balance-designer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-14 · **Delegate to:** game-balance-designer
 - **Read first:** `docs/game-design/07-victory-and-lifecycle.md`
 - **Do:** Evaluate the **one** configured victory condition (Domination/Economic/Diplomatic/Survival/Wonder);
   compute weighted score for ranking/non-win; elimination & vassalage; lifecycle states
@@ -239,7 +239,7 @@ client/agent-visible read (flagged 🔒 below).
   shared-victory split honoured; lifecycle transitions guarded.
 
 ### E1-16 · Public event emission
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-10, E1-12 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-10, E1-12 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/specs/websocket-protocol.md` (event types), `docs/game-design/03-actions.md` §"Resolution order" step 11
 - **Do:** Emit the public event set (`WarDeclared, TreatySigned, TreatyBroken, AllianceFormed, SystemCaptured,
   BattleResolved, RouteEstablished, RouteRaided, FactionEliminated, VictoryAchieved`) as the final resolution step,
@@ -247,7 +247,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** events emitted deterministically in order; payloads match the WS spec; append-only.
 
 ### E1-17 · Golden-hash & replay tests
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-06…E1-16 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-06…E1-16 · **Delegate to:** game-engine-developer
 - **Read first:** `.claude/skills/game-engine-determinism`, `docs/game-design/07-victory-and-lifecycle.md` §5
 - **Do:** End-to-end determinism: replay a recorded `(seed, action log)` and assert **identical** state hash at every
   tick. Cover a multi-faction scenario exercising economy/combat/diplomacy.
@@ -286,7 +286,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** no faction starts boxed-in or starved; separation/balance constraints tested; placement reproducible.
 
 ### E2-05 · Promotion / demotion boundary
-- **Status:** ☐ Todo · **Module:** galaxy/engine · **Depends on:** E2-02, E1-01 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** galaxy/engine/orchestrator · **Depends on:** E2-02, E1-01 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/architecture/02-galaxy-scale.md` §7, `docs/specs/data-model.md`
 - **Do:** Colonising a procedural star **promotes** it to an `active_system` (materialise planet/building rows);
   abandonment **demotes** back to pure procedural scenery. The sim only ever touches active systems.
@@ -313,7 +313,7 @@ client/agent-visible read (flagged 🔒 below).
   fog rules tested against the visibility spec.
 
 ### E3-03 · Headless match runner + determinism replay
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E1-17, E3-01, E3-02 · **Delegate to:** game-engine-developer
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E1-17, E3-01, E3-02 · **Delegate to:** game-engine-developer
 - **Read first:** `docs/ROADMAP.md` Phase 1, `.claude/skills/game-engine-determinism`
 - **Do:** A headless runner that drives ticks with scripted bots (no Spring needed), records the action log, and can
   **replay** to verify identical state hashes. The proof that the engine + galaxy are reproducible end-to-end.
@@ -324,14 +324,14 @@ client/agent-visible read (flagged 🔒 below).
 # E4 — LLM agent runtime + tick orchestration  *(Phase 2)* — read `.claude/skills/spring-ai-agent`, `agent-sovereign`
 
 ### E4-01 · ChatClient integration (provider-pluggable)
-- **Status:** ☐ Todo · **Module:** agent-runtime · **Depends on:** E3-01 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** agent-runtime · **Depends on:** E3-01 · **Delegate to:** agent-runtime-developer
 - **Read first:** `.claude/skills/spring-ai-agent`, `docs/architecture/01-system-overview.md` §5
 - **Do:** Wire Spring AI 2.0.0-M8 `ChatClient`; **Ollama default**, OpenAI/others by Spring profile/properties.
   Model **tier** routing by config. No vendor/model/endpoint hardcoded.
 - **Done when:** switching provider/model is config-only; an integration test runs against a local Ollama (or a stub).
 
 ### E4-02 · Prompt assembly
-- **Status:** ☐ Todo · **Module:** agent-runtime · **Depends on:** E4-01, E3-02 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** agent-runtime · **Depends on:** E4-01, E3-02 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/architecture/03-agent-runtime.md` §2, `.claude/skills/spring-ai-agent`
 - **Do:** System prompt = persona + goals + hard constraints + compact rules summary + strict output JSON schema
   (closed Action set) + one worked example. User message = serialized compact WorldView.
@@ -371,14 +371,14 @@ client/agent-visible read (flagged 🔒 below).
 # E5 — Persistence  *(Phase 2)*
 
 ### E5-01 · PostgreSQL schema & migrations
-- **Status:** ☐ Todo · **Module:** persistence · **Depends on:** E1-01 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** persistence · **Depends on:** E1-01 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/specs/data-model.md`
 - **Do:** Flyway migrations for `game, faction, active_system, planet, building, fleet, ship, treaty, route,
   market_order, tech_progress, event_log`. **Only active systems** persisted (catalog is procedural, not stored).
 - **Done when:** migrations apply cleanly; schema matches the spec; event_log is append-only & tick-ordered.
 
 ### E5-02 · Active-state repositories
-- **Status:** ☐ Todo · **Module:** persistence · **Depends on:** E5-01 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** persistence · **Depends on:** E5-01 · **Delegate to:** agent-runtime-developer
 - **Read first:** `docs/specs/data-model.md`, `docs/architecture/02-galaxy-scale.md` §7
 - **Do:** Repositories to load/save the bounded active set into/out of the engine's in-memory `GameState`. Promotion
   inserts active rows; demotion deletes them.
@@ -410,7 +410,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** config persists & feeds prompt assembly; non-owners get redacted views; directive edits gated to between-matches.
 
 ### E6-03 · Tile + overlay endpoints
-- **Status:** ☐ Todo · **Module:** api · **Depends on:** E2-01 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** api · **Depends on:** E2-01 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `docs/specs/rest-api.md` §Galaxy tiles, `docs/architecture/02-galaxy-scale.md` §3,§5
 - **Do:** `GET /api/galaxy/{seed}/tile/{level}/{x}/{y}` → `AggregateTile|StarListTile`, **immutable, long-TTL, ETag by
   (seed,level,x,y,schemaVersion)**. Separate thin dynamic `GET /api/galaxy/{gameId}/overlay?bbox=&sinceTick=`.
@@ -429,14 +429,14 @@ client/agent-visible read (flagged 🔒 below).
 # E7 — Frontend (Angular 21, canvas PoC port)  *(Phase 2)* — read `angular21-signals`, `galaxy-rendering`, `lod-tiling`
 
 ### E7-01 · Signal stores (camera + game state)
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E0-02 · **Delegate to:** frontend-developer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E0-02 · **Delegate to:** frontend-developer
 - **Read first:** `.claude/skills/angular21-signals`, `poc/galaxy-navigator.html` (camera model)
 - **Do:** Signal-based **camera store** (pan/zoom state) ported from the PoC, plus signal stores for game state
   (factions, events, overlay). Zoneless-friendly, computed-derived view models.
 - **Done when:** camera store mirrors PoC behaviour; state flows through signals; no Zone.js dependency.
 
 ### E7-02 · Canvas galaxy renderer (PoC port)
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E7-01, E6-03 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E7-01, E6-03 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `.claude/skills/galaxy-rendering`, `poc/galaxy-navigator.html`
 - **Do:** Port the canvas PoC into an Angular standalone component for the **small-galaxy** tier: stars, routes,
   zoom-gated detail (planets/orbits/labels). Same data contract that WebGL2 will later satisfy (E8).

@@ -206,6 +206,9 @@
     }
   },
   "victory": {
+    "active": "DOMINATION",
+    "conditionEnabled": true,
+    "eliminationEnabled": true,
     "domination": { "systemPct": 0.6 },
     "economic": { "influenceTarget": 1000.0, "orTopForTicks": 40 },
     "diplomatic": { "allianceMajorityPct": 0.6 },
@@ -258,5 +261,12 @@
     "stealResourceFraction": 0.2,
     "unrestPopulationLoss": 2,
     "unrestLoyaltyLoss": 0.2
+  },
+  "influence": {
+    "perCapitalSystem": 1.0,
+    "perMonument": 3.0,
+    "perTradeVolume": 0.5,
+    "perActiveTreaty": 0.5,
+    "decayRate": 0.02
   }
 }

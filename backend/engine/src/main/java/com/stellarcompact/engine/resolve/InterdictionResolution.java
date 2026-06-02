@@ -65,13 +65,24 @@ final class InterdictionResolution {
      * ({@code (actor, submissionOrder)}); a raid steal is escrowed through {@code ledger}
      * and settled in the single authoritative pass. Non-interdiction actions are ignored.
      */
+    /**
+     * Backwards-compatible overload (pre-E1-16): resolves without collecting public
+     * events. Existing tests that do not assert events keep this signature; the
+     * {@link Resolver} uses the {@code events}-bearing overload to surface RouteRaided.
+     */
     static GameState resolve(GameState state, List<SubmittedAction> slice,
                              long gameSeed, long tick, BalanceProfile profile, SpendLedger ledger) {
+        return resolve(state, slice, gameSeed, tick, profile, ledger, new java.util.ArrayList<>());
+    }
+
+    static GameState resolve(GameState state, List<SubmittedAction> slice,
+                             long gameSeed, long tick, BalanceProfile profile, SpendLedger ledger,
+                             List<PublicEvent> events) {
         GameState next = state;
         for (SubmittedAction sa : slice) {
             switch (sa.action()) {
                 case Action.Blockade b -> next = resolveBlockade(next, sa.actor(), b);
-                case Action.Raid r -> next = resolveRaid(next, sa.actor(), r, gameSeed, tick, profile, ledger);
+                case Action.Raid r -> next = resolveRaid(next, sa.actor(), r, gameSeed, tick, profile, ledger, events);
                 default -> { /* not an interdiction action: ignore */ }
             }
         }
@@ -125,7 +136,7 @@ final class InterdictionResolution {
      */
     private static GameState resolveRaid(GameState state, FactionId actor, Action.Raid a,
                                          long gameSeed, long tick, BalanceProfile profile,
-                                         SpendLedger ledger) {
+                                         SpendLedger ledger, List<PublicEvent> events) {
         Route route = state.routes().get(a.routeId());
         if (route == null || actor.equals(route.owner())) {
             return state; // stale id / self-raid (validator rejects): safe no-op
@@ -152,6 +163,9 @@ final class InterdictionResolution {
         // the raider banks what the ledger nets).
         ledger.escrow(route.owner(), haul);
         ledger.credit(actor, haul);
+        // E1-16: a successful raid (a shipment was actually stolen) is announced
+        // galaxy-wide (parties = [raider, route owner]). A no-op raid above emits nothing.
+        events.add(new PublicEvent.RouteRaided(actor, route.owner(), tick));
         return state;
     }
 

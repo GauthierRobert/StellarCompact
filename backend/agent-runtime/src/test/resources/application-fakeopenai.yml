@@ -1,0 +1,12 @@
+# Test-only profile proving provider/model switching is CONFIG-ONLY (principle 4).
+# Activating a profile remaps the very same tiers to a different provider's model
+# names; SovereignChatClientFactory and all Java are untouched. Names here are
+# illustrative OpenAI-style ids — the test asserts they flow through the ChatClient
+# regardless of the (stubbed) provider behind it.
+stellar-compact:
+  agent:
+    default-tier: MEDIUM
+    tiers:
+      SMALL: "gpt-4o-mini"
+      MEDIUM: "gpt-4o"
+      LARGE: "gpt-4.1"

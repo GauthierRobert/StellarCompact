@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# Agent-runtime model configuration (card E4-01).
+#
+# Provider neutrality (principle 4): NO vendor/model/endpoint is hardcoded in
+# Java. The provider is chosen by which Spring AI starter is active plus the
+# spring.ai.* keys below; the orchestration tier -> model mapping lives under
+# stellar-compact.agent.tiers. Switching provider or model is config-only.
+#
+# This file ships sensible DEFAULTS for the default provider (Ollama). The app
+# module includes it via spring.config.import or by activating the "agent"
+# profile; nothing here is required for the module to wire its beans.
+# ---------------------------------------------------------------------------
+spring:
+  ai:
+    # Default provider = local Ollama. Endpoint is config, not code.
+    ollama:
+      base-url: http://localhost:11434
+      # We do NOT pin a chat.options.model here on purpose: the per-Sovereign
+      # model is chosen per tier below and applied through the ChatClient. A
+      # provider default can still be set here if desired.
+      init:
+        pull-model-strategy: never   # never auto-pull in CI/dev; fail fast instead
+
+# Orchestration tier -> concrete model. Opaque, provider-specific names that
+# agent-runtime forwards verbatim to the ChatClient as the per-call model option.
+stellar-compact:
+  agent:
+    default-tier: SMALL
+    tiers:
+      SMALL: "llama3.2:1b"
+      MEDIUM: "llama3.1:8b"
+      LARGE: "llama3.1:70b"
+    # Prompt-assembly token budget (card E4-02). The whole assembled prompt
+    # (system + user) must estimate within max-tokens or assembly fails fast
+    # (the faction Holds that tick). NOT a hardcoded magic number (rule 6).
+    # max-tokens <= 0 disables the check; chars-per-token tunes the estimator.
+    prompt:
+      max-tokens: 8192
+      chars-per-token: 4
+
+---
+# ---------------------------------------------------------------------------
+# OpenAI provider profile — config-only swap, NO code change.
+#
+# Activate with: --spring.profiles.active=openai  (and put the OpenAI starter
+# on the classpath via the agent-runtime pom's "openai" Maven profile, or have
+# it always present and gated purely by Spring profile). The SAME tiers are
+# remapped to OpenAI model names; SovereignChatClientFactory is unchanged.
+# ---------------------------------------------------------------------------
+spring:
+  config:
+    activate:
+      on-profile: openai
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: https://api.openai.com
+
+stellar-compact:
+  agent:
+    default-tier: SMALL
+    tiers:
+      SMALL: "gpt-4o-mini"
+      MEDIUM: "gpt-4o"
+      LARGE: "gpt-4.1"

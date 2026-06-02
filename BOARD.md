@@ -544,7 +544,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** an archived match replays tick-identically and is watchable in the spectator view with scrub/seek.
 
 ### E9-03 · Tournament / season scaffolding + leaderboard
-- **Status:** ☐ Todo · **Module:** all · **Depends on:** E9-01, E9-02 · **Delegate to:** game-balance-designer
+- **Status:** ✅ Done · **Module:** all · **Depends on:** E9-01, E9-02 · **Delegate to:** game-balance-designer
 - **Read first:** `docs/game-design/07-victory-and-lifecycle.md` §2,§6
 - **Do:** Bracket/season structure where humans enter agents; scoring feeds rankings and the small→large gating;
   public spectator experience.

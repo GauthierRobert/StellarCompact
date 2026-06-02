@@ -81,7 +81,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 ## E9 — Progression & spectacle (Phase 4)
 - ✅ **E9-01** Small→large progression + reputation carry-over — *deps: E1-15, E6-01* — game-balance-designer
 - ✅ **E9-02** Replay / spectator from (seed, action log) — *deps: E1-17, E5-01, E7-06* — game-engine-developer
-- ☐ **E9-03** Tournament / season scaffolding + leaderboard — *deps: E9-01, E9-02* — game-balance-designer
+- ✅ **E9-03** Tournament / season scaffolding + leaderboard — *deps: E9-01, E9-02* — game-balance-designer
 
 ## Cross-cutting (recurring)
 - ☐ **X-01** 🔒 Security review pass — security-reviewer

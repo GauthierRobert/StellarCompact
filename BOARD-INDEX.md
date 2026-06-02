@@ -67,7 +67,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E7-03** STOMP client → signals — *deps: E7-01, E6-04* — frontend-developer
 - ✅ **E7-04** HUD & panels — *deps: E7-01* — frontend-developer
 - ✅ **E7-05** Sovereign config screens — *deps: E6-02* — frontend-developer
-- ☐ **E7-06** Spectator view & public event feed — *deps: E7-02, E7-03* — frontend-developer
+- ✅ **E7-06** Spectator view & public event feed — *deps: E7-02, E7-03* — frontend-developer
 
 ## E8 — Scale to billions (Phase 3)
 - ✅ **E8-01** WebGL2 instanced renderer (swap canvas) — *deps: E7-02* — galaxy-renderer-engineer
@@ -76,7 +76,7 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E8-04** Quadtree/Hilbert tile service + payloads — *deps: E8-03, E6-03* — galaxy-renderer-engineer
 - ✅ **E8-05** Viewport tile fetch + cache + LOD cross-fade — *deps: E8-04, E8-01* — galaxy-renderer-engineer
 - ✅ **E8-06** 🔒 Active overlay layer composited on tiles — *deps: E8-05, E6-04* — galaxy-renderer-engineer
-- ☐ **E8-07** Floating origin + CDN / pre-bake — *deps: E8-05* — galaxy-renderer-engineer
+- ✅ **E8-07** Floating origin + CDN / pre-bake — *deps: E8-05* — galaxy-renderer-engineer
 
 ## E9 — Progression & spectacle (Phase 4)
 - ✅ **E9-01** Small→large progression + reputation carry-over — *deps: E1-15, E6-01* — game-balance-designer

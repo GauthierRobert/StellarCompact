@@ -465,7 +465,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** a human can configure & attach a Sovereign to a game; validation matches the REST contract.
 
 ### E7-06 · Spectator view & public event feed
-- **Status:** ☐ Todo · **Module:** frontend · **Depends on:** E7-02, E7-03 · **Delegate to:** frontend-developer
+- **Status:** ✅ Done · **Module:** frontend · **Depends on:** E7-02, E7-03 · **Delegate to:** frontend-developer
 - **Read first:** `docs/game-design/07-victory-and-lifecycle.md` §5, `docs/specs/websocket-protocol.md`
 - **Do:** Spectator mode: watch the galaxy + a live public event feed (wars, treaties, betrayals, battles, captures),
   leaderboard, victory-progress. The "AI as sport" view.
@@ -519,7 +519,7 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** overlay updates live without re-fetching star tiles; heavy tiles stay CDN-cacheable; fog-correct.
 
 ### E8-07 · Floating origin + CDN / pre-bake
-- **Status:** ☐ Todo · **Module:** frontend/api · **Depends on:** E8-05 · **Delegate to:** galaxy-renderer-engineer
+- **Status:** ✅ Done · **Module:** frontend/api · **Depends on:** E8-05 · **Delegate to:** galaxy-renderer-engineer
 - **Read first:** `docs/architecture/02-galaxy-scale.md` §4,§5
 - **Do:** Re-centre world coords on the camera periodically (avoid float32 breakdown at extreme zoom). Pre-bake coarse
   tiles + the active region's fine tiles; serve via CDN.

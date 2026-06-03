@@ -714,31 +714,59 @@ public record BalanceProfile(
             Diplomatic diplomatic,
             Survival survival,
             Wonder wonder,
-            ScoreWeights scoreWeights
+            ScoreWeights scoreWeights,
+            // --- E11-02 hard timeout-victory (append-only; inert at 0 = disabled) ---
+            // A hard match-length ceiling in ticks that applies REGARDLESS of the active
+            // primary condition (board finding L3: with any non-SURVIVAL active kind the
+            // match could run forever). When the match is still RUNNING at this tick and no
+            // primary condition has fired, the match is concluded with the deterministic
+            // {@code Scoring.rank} leader (ties broken by faction id) as winner. Distinct
+            // from {@code survival.tickLimit} (which only applies when active == SURVIVAL)
+            // so the two semantics never overload one field. {@code <= 0} disables it (the
+            // inert default for any pre-E11-02 profile), so such a profile relies on its
+            // primary/elimination conditions exactly as before and the golden hash is
+            // unperturbed.
+            int hardTickLimit
     ) {
         /**
          * Compact constructor defaulting the E1-15 {@code active} selector to
          * {@link VictoryKind#SURVIVAL} when a profile omits it (the always-reachable
          * tick-limit fallback). The two boolean switches are primitives that default to
          * {@code false} (both OFF) for older positional callers via the delegating
-         * constructor below.
+         * constructor below. {@code hardTickLimit} is a primitive that defaults to
+         * {@code 0} (disabled) for those older callers.
          */
         public Victory {
             active = active == null ? VictoryKind.SURVIVAL : active;
         }
 
         /**
+         * Backwards-compatible nine-arg constructor predating the E11-02 {@code
+         * hardTickLimit}: delegates with {@code 0} (the timeout disabled). Lets E1-15-era
+         * fixtures/profiles that build a Victory positionally (through {@code scoreWeights})
+         * keep compiling unchanged, and - critically - keeps the hard-timeout fallback inert
+         * for them so the golden state hash is unperturbed.
+         */
+        public Victory(VictoryKind active, boolean conditionEnabled, boolean eliminationEnabled,
+                       Domination domination, Economic economic, Diplomatic diplomatic,
+                       Survival survival, Wonder wonder, ScoreWeights scoreWeights) {
+            this(active, conditionEnabled, eliminationEnabled,
+                    domination, economic, diplomatic, survival, wonder, scoreWeights, 0);
+        }
+
+        /**
          * Backwards-compatible six-arg constructor predating the E1-15 {@code active}
          * selector and the two switches: delegates with {@link VictoryKind#SURVIVAL}
-         * active and both switches OFF. Lets pre-E1-15 fixtures/profiles that build a
-         * Victory positionally (the five condition records + score weights) keep
-         * compiling unchanged, and - critically - keeps victory/elimination evaluation
-         * inert for them so the golden state hash is unperturbed.
+         * active, both switches OFF and the E11-02 hard timeout disabled. Lets pre-E1-15
+         * fixtures/profiles that build a Victory positionally (the five condition records +
+         * score weights) keep compiling unchanged, and - critically - keeps
+         * victory/elimination/timeout evaluation inert for them so the golden state hash is
+         * unperturbed.
          */
         public Victory(Domination domination, Economic economic, Diplomatic diplomatic,
                        Survival survival, Wonder wonder, ScoreWeights scoreWeights) {
             this(VictoryKind.SURVIVAL, false, false,
-                    domination, economic, diplomatic, survival, wonder, scoreWeights);
+                    domination, economic, diplomatic, survival, wonder, scoreWeights, 0);
         }
     }
 

@@ -3,6 +3,8 @@ package com.stellarcompact.api.ws;
 import com.stellarcompact.engine.state.FactionId;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -12,10 +14,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * binding derived from the match seat-assignment table and a session-authenticated
  * principal, behind the same interface.
  *
- * <p><b>Keying.</b> Ownership is keyed by {@code (gameId, factionId)} so the same human
- * principal can own different factions across concurrent matches, and so two principals
- * in the same match stay isolated. The map ({@code key -> principal}) also lets the
- * publisher address the owner user queue.
+ * <p><b>Keying.</b> Ownership is keyed by a {@code (gameId, factionId)} record so the same
+ * human principal can own different factions across concurrent matches, two principals in
+ * the same match stay isolated, and the {@link #factionsOwnedBy reverse lookup} can
+ * reconstruct each edge unambiguously (a string key would be ambiguous if a gameId ever
+ * contained the separator). The map ({@code key -> principal}) also lets the publisher
+ * address the owner user queue.
  *
  * <p><b>Default deny by construction.</b> {@link #owns} only ever returns {@code true}
  * when an explicit {@link #bind} placed exactly this principal against exactly this
@@ -25,20 +29,19 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class InMemoryFactionOwnershipRegistry implements FactionOwnershipRegistry {
 
-    private final Map<String, String> ownerByKey = new ConcurrentHashMap<>();
+    private final Map<Key, String> ownerByKey = new ConcurrentHashMap<>();
 
     /** Bind {@code principalName} as the sole owner of {@code faction} in {@code gameId}. */
     public void bind(String principalName, String gameId, FactionId faction) {
         if (principalName == null || principalName.isBlank()) {
             throw new IllegalArgumentException("principalName must be non-blank");
         }
-        ownerByKey.put(key(gameId, faction), principalName);
+        ownerByKey.put(new Key(gameId, faction.value()), principalName);
     }
 
     /** Remove all bindings for a match (e.g. when it concludes). */
     public void clearGame(String gameId) {
-        String prefix = gameId + " ";
-        ownerByKey.keySet().removeIf(k -> k.startsWith(prefix));
+        ownerByKey.keySet().removeIf(k -> k.gameId().equals(gameId));
     }
 
     @Override
@@ -46,7 +49,7 @@ public class InMemoryFactionOwnershipRegistry implements FactionOwnershipRegistr
         if (principalName == null || gameId == null || faction == null) {
             return false;
         }
-        return principalName.equals(ownerByKey.get(key(gameId, faction)));
+        return principalName.equals(ownerByKey.get(new Key(gameId, faction.value())));
     }
 
     @Override
@@ -54,10 +57,24 @@ public class InMemoryFactionOwnershipRegistry implements FactionOwnershipRegistr
         if (gameId == null || faction == null) {
             return null;
         }
-        return ownerByKey.get(key(gameId, faction));
+        return ownerByKey.get(new Key(gameId, faction.value()));
     }
 
-    private static String key(String gameId, FactionId faction) {
-        return gameId + " " + faction.value();
+    @Override
+    public List<OwnedFaction> factionsOwnedBy(String principalName) {
+        if (principalName == null || principalName.isBlank()) {
+            return List.of();
+        }
+        return ownerByKey.entrySet().stream()
+                .filter(e -> principalName.equals(e.getValue()))
+                .map(e -> new OwnedFaction(e.getKey().gameId(), new FactionId(e.getKey().faction())))
+                .sorted(Comparator
+                        .comparing((OwnedFaction o) -> o.gameId())
+                        .thenComparing(o -> o.faction().value()))
+                .toList();
+    }
+
+    /** Composite ownership key; {@code faction} is the {@link FactionId} value. */
+    private record Key(String gameId, String faction) {
     }
 }

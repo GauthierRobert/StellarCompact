@@ -60,7 +60,7 @@ class FactionConfigControllerTest {
 
     /** Create a CREATED match directly through the service and return its id. */
     private String createGame() {
-        return matchService.create(new CreateGameRequest(777L, null, 2, null, null, null)).gameId();
+        return matchService.create(new CreateGameRequest(777L, null, 2, null, null, null, null)).gameId();
     }
 
     /** Attach a Sovereign as {@code owner}; return the seat handle. */

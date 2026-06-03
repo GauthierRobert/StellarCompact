@@ -20,6 +20,7 @@ import com.stellarcompact.engine.validation.ActionValidator;
 import com.stellarcompact.engine.validation.ValidationResult;
 import com.stellarcompact.orchestrator.match.MatchRecord;
 import com.stellarcompact.orchestrator.match.MatchReplay;
+import com.stellarcompact.orchestrator.sovereign.AggressiveScriptedSovereign;
 import com.stellarcompact.orchestrator.sovereign.ScriptedSovereign;
 import com.stellarcompact.orchestrator.sovereign.Sovereign;
 import com.stellarcompact.orchestrator.sovereign.SystemAdjacency;
@@ -114,19 +115,27 @@ public class InMemoryMatchService implements MatchService {
     @Override
     public GameSummary create(CreateGameRequest request) {
         CreateGameRequest req = request == null
-                ? new CreateGameRequest(null, null, null, null, null, null) : request;
+                ? new CreateGameRequest(null, null, null, null, null, null, null) : request;
 
         int factionCount = clampFactions(req.factionCount());
         long seed = req.seed() != null ? req.seed() : deriveSeed();
         BalanceProfile profile = loadProfile(req.balanceProfile());
 
-        GameState initial = MatchBootstrap.initialState(seed, factionCount, profile);
-        LaneNetwork network = MatchBootstrap.laneNetwork(factionCount);
-        SystemAdjacency adjacency = MatchBootstrap.adjacency(factionCount);
+        MatchBootstrap.Bootstrap boot = MatchBootstrap.build(seed, factionCount, profile);
+        GameState initial = boot.state();
+        LaneNetwork network = boot.lanes();
+        SystemAdjacency adjacency = boot.adjacency();
 
+        // E11-04 (🔒 security): turn the untrusted, optional per-seat agent-type tokens into
+        // concrete Sovereigns. resolveSeatTypes validates against the closed SeatType whitelist
+        // (unknown token / length mismatch => 400, never a silent default-through); seatFor maps
+        // each validated type to an instance via an exhaustive switch (no reflection, no
+        // arbitrary instantiation).
+        List<FactionId> factionIds = MatchBootstrap.factionIds(factionCount);
+        List<SeatType> seatTypes = resolveSeatTypes(req.seats(), factionCount);
         List<Sovereign> seats = new ArrayList<>();
-        for (FactionId fid : MatchBootstrap.factionIds(factionCount)) {
-            seats.add(new ScriptedSovereign(fid));
+        for (int i = 0; i < factionCount; i++) {
+            seats.add(seatFor(seatTypes.get(i), factionIds.get(i)));
         }
 
         String gameId = UUID.randomUUID().toString();
@@ -171,6 +180,14 @@ public class InMemoryMatchService implements MatchService {
             match.startLoop(this::runLoopTick);
         }
         return summaryOf(match);
+    }
+
+    @Override
+    public List<GameSummary> list() {
+        return matches.values().stream()
+                .map(InMemoryMatchService::summaryOf)
+                .sorted(Comparator.comparing(GameSummary::gameId))
+                .toList();
     }
 
     // ===== reads ===============================================================
@@ -301,6 +318,20 @@ public class InMemoryMatchService implements MatchService {
         return done;
     }
 
+    /**
+     * Test seam (E11-04): the concrete {@link Sovereign} simple class name seated at each
+     * faction seat, in the match's fixed ascending faction-id seat order. Lets a test assert
+     * that the per-seat agent-type selection actually instantiated the requested bots (e.g.
+     * that an {@code AGGRESSIVE} token really seats an {@code AggressiveScriptedSovereign}),
+     * without exposing seat internals on the public {@link GameSummary}.
+     */
+    List<String> seatTypesForTest(String gameId) {
+        Match match = require(gameId);
+        return match.seats().stream()
+                .map(s -> s.getClass().getSimpleName())
+                .toList();
+    }
+
     // ===== tick loop ===========================================================
 
     private boolean runLoopTick(Match match) {
@@ -409,6 +440,67 @@ public class InMemoryMatchService implements MatchService {
             n = MAX_FACTIONS;
         }
         return n;
+    }
+
+    /**
+     * Validate the untrusted, optional per-seat agent-type tokens against the closed
+     * {@link SeatType} whitelist and return exactly one {@code SeatType} per (clamped) seat
+     * (E11-04, 🔒 security-sensitive - this is where request-controlled input becomes a seat
+     * choice).
+     *
+     * <p><b>Rules (all reject-on-violation, never default-through):</b>
+     * <ul>
+     *   <li><b>Absent / empty</b> {@code seats}: default every seat to {@link SeatType#SCRIPTED}
+     *       (the existing, lower-risk all-scripted behaviour; the aggressive/LLM mix is opt-in
+     *       and must be asked for explicitly).</li>
+     *   <li><b>Length</b>: when present, {@code seats.size()} must equal {@code factionCount}
+     *       <em>after</em> the same {@code [2,8]} clamp the galaxy is built with - otherwise a
+     *       caller could not tell which seat each token maps to. A mismatch is a
+     *       {@link IllegalArgumentException} (mapped to {@code 400} by the controller).</li>
+     *   <li><b>Whitelist</b>: every token must name a {@link SeatType} constant
+     *       (case-insensitive). An unknown / blank / null token is rejected with a clear
+     *       {@code 400} that names the offending value and the allowed set - it is never
+     *       coerced to a default, and no class is ever loaded by name.</li>
+     * </ul>
+     */
+    private static List<SeatType> resolveSeatTypes(List<String> requestedSeats, int factionCount) {
+        if (requestedSeats == null || requestedSeats.isEmpty()) {
+            return java.util.Collections.nCopies(factionCount, SeatType.SCRIPTED);
+        }
+        if (requestedSeats.size() != factionCount) {
+            throw new IllegalArgumentException("seats length (" + requestedSeats.size()
+                    + ") must equal the (clamped) factionCount (" + factionCount + ")");
+        }
+        List<SeatType> resolved = new ArrayList<>(factionCount);
+        for (String token : requestedSeats) {
+            SeatType type = SeatType.parse(token).orElseThrow(() ->
+                    new IllegalArgumentException("unknown seat type: " + token
+                            + " (allowed: " + java.util.Arrays.toString(SeatType.values()) + ")"));
+            resolved.add(type);
+        }
+        return resolved;
+    }
+
+    /**
+     * Map a <em>validated</em> {@link SeatType} to a concrete {@link Sovereign} for
+     * {@code fid} via an exhaustive switch over the closed enum (E11-04). No reflection, no
+     * arbitrary instantiation - only the two scripted bots can be constructed from request
+     * input.
+     *
+     * <p>{@link SeatType#LLM} is whitelisted but <b>not wired in this build</b>: the api module
+     * does not depend on {@code agent-runtime} and there is no concrete LLM {@code Sovereign}
+     * adapter on its classpath, so an LLM seat is rejected with a clear {@code 400} rather than
+     * silently falling back to a scripted bot or instantiating Spring AI machinery from
+     * untrusted input (provider neutrality stays a config concern - principle 4).
+     */
+    private static Sovereign seatFor(SeatType type, FactionId fid) {
+        return switch (type) {
+            case SCRIPTED -> new ScriptedSovereign(fid);
+            case AGGRESSIVE -> new AggressiveScriptedSovereign(fid);
+            case LLM -> throw new IllegalArgumentException(
+                    "LLM seats not available in this build (agent-runtime not wired into the "
+                            + "match API); use SCRIPTED or AGGRESSIVE");
+        };
     }
 
     private long deriveSeed() {

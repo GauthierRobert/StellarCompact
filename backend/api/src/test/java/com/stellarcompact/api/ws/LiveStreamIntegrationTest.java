@@ -102,7 +102,7 @@ class LiveStreamIntegrationTest {
     @Test
     void spectatorGetsPublicStreamOwnerGetsOwnViewNonOwnerIsDenied() throws Exception {
         // Create a 2-faction match and bind human owners BEFORE starting.
-        GameSummary game = matchService.create(new CreateGameRequest(123L, null, 2, null, null, null));
+        GameSummary game = matchService.create(new CreateGameRequest(123L, null, 2, null, null, null, null));
         String gameId = game.gameId();
         ownership.bind("alice", gameId, new FactionId("faction-1"));
         ownership.bind("bob", gameId, new FactionId("faction-2"));

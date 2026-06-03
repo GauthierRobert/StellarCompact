@@ -6,6 +6,26 @@ spring:
     name: stellar-compact
 
 stellar-compact:
+  # Dev authentication (username-only JWT — see docs/specs/rest-api.md "Authentication
+  # (dev)").  POST /api/auth/login mints an HS256 token whose `sub` is the username; the
+  # resource server verifies it on every Bearer request so the request Principal becomes
+  # that username.  THIS SECRET IS A DEV PLACEHOLDER — override it (>= 32 bytes) in any
+  # real environment.  Moving to Google OAuth later replaces only the issuer/decoder.
+  auth:
+    jwt:
+      secret: dev-only-insecure-stellar-compact-jwt-secret-change-me
+      issuer: stellar-compact-dev
+      ttl: 12h
+
+  # Demo-match autostart (E11-07).  Opt-in: set to true to have the backend
+  # create and start one demo match on boot so `npm start` shows a live game
+  # immediately.  Default is false so tests and production boots are unchanged.
+  # Override faction-count / balance-profile / seed under stellar-compact.demo.*
+  # (see DemoProperties).  To opt in for local dev, add application-demo.yml or
+  # pass -Dstellar-compact.demo.autostart=true on the command line.
+  demo:
+    autostart: false
+
   orchestrator:
     # Tick-loop timings (card E4-05). These are ORCHESTRATION timings (wall-clock
     # deadlines / pacing), deliberately outside the deterministic engine boundary -

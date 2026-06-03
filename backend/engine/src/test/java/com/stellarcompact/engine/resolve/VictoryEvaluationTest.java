@@ -58,6 +58,17 @@ class VictoryEvaluationTest {
                                           double diplomaticPct, int survivalTickLimit,
                                           int wonderStages,
                                           BalanceProfile.ScoreWeights weights) {
+        return profile(active, conditionEnabled, eliminationEnabled, dominationPct,
+                influenceTarget, diplomaticPct, survivalTickLimit, wonderStages, weights, 0);
+    }
+
+    private static BalanceProfile profile(VictoryKind active, boolean conditionEnabled,
+                                          boolean eliminationEnabled,
+                                          double dominationPct, double influenceTarget,
+                                          double diplomaticPct, int survivalTickLimit,
+                                          int wonderStages,
+                                          BalanceProfile.ScoreWeights weights,
+                                          int hardTickLimit) {
         BalanceProfile.Victory victory = new BalanceProfile.Victory(
                 active, conditionEnabled, eliminationEnabled,
                 new BalanceProfile.Domination(dominationPct),
@@ -65,7 +76,7 @@ class VictoryEvaluationTest {
                 new BalanceProfile.Diplomatic(diplomaticPct),
                 new BalanceProfile.Survival(survivalTickLimit),
                 new BalanceProfile.Wonder(wonderStages, 30),
-                weights);
+                weights, hardTickLimit);
         return new BalanceProfile(
                 "test", 1,
                 new BalanceProfile.Resources(Map.of(), Map.of(), 0.1),
@@ -190,6 +201,44 @@ class VictoryEvaluationTest {
         List<PublicEvent> events = new ArrayList<>();
         GameState after = VictoryEvaluation.evaluate(win, p, events);
         assertEquals(GameStatus.CONCLUDED, after.status(), "RUNNING -> CONCLUDED on victory");
+    }
+
+    /**
+     * E11-03 reconciliation (4-agent-sim finding L3): on the galaxy-generated live small map a
+     * faction can own 1..8 systems (4 homes + up to 4 planeted neutrals from
+     * {@code MatchBootstrap}), so {@code small-default}'s DOMINATION {@code systemPct = 0.6} -
+     * which needs {@code ceil(0.6 * 8) = 5} systems - is now reachable-but-not-trivial. This
+     * pins that arithmetic against the shipped 0.6 on an 8-system snapshot: 5 of 8 wins, 4 of 8
+     * does not (so 0.6 demands genuine dominance, not merely the largest of four ~2-system
+     * factions). The old stub allowed at most 1 owned system, which is why L3 reported it
+     * unreachable; the fix was the E11-01 generator (planeted neutrals + a connected region),
+     * not a lower threshold.
+     */
+    @Test
+    void dominationReachableOnEightSystemGeneratedSmallMap() {
+        BalanceProfile p = profile(VictoryKind.DOMINATION, true, false,
+                0.6, 1000, 0.6, 100000, 3, weights());
+        // 8 systems (mirrors small-default: 4 homes + 4 neutrals). alpha owns 5 (>= ceil(4.8)=5).
+        GameState win = state(5L,
+                Map.of(ALPHA, faction(ALPHA, 0), BETA, faction(BETA, 0)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", ALPHA, List.of()),
+                        ownedSystem("s3", ALPHA, List.of()), ownedSystem("s4", ALPHA, List.of()),
+                        ownedSystem("s5", ALPHA, List.of()), ownedSystem("s6", BETA, List.of()),
+                        neutralSystem("s7"), neutralSystem("s8")),
+                List.of());
+        assertEquals(List.of(ALPHA), winners(evaluate(win, p)),
+                "5 of 8 (62.5%) clears the 0.6 domination bar on the generated small map");
+
+        // alpha owns only 4 of 8 (50%): below 0.6's required 4.8 -> no win (not trivial).
+        GameState below = state(5L,
+                Map.of(ALPHA, faction(ALPHA, 0), BETA, faction(BETA, 0)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", ALPHA, List.of()),
+                        ownedSystem("s3", ALPHA, List.of()), ownedSystem("s4", ALPHA, List.of()),
+                        ownedSystem("s5", BETA, List.of()), ownedSystem("s6", BETA, List.of()),
+                        neutralSystem("s7"), neutralSystem("s8")),
+                List.of());
+        assertEquals(0, victories(evaluate(below, p)),
+                "4 of 8 (50%) does not clear 0.6 -> domination still demands real dominance");
     }
 
     // ===== Economic ============================================================
@@ -341,6 +390,103 @@ class VictoryEvaluationTest {
                 List.of(ownedSystem("s1", ALPHA, List.of())),
                 List.of());
         assertTrue(evaluate(s, p).isEmpty(), "both switches off -> no events, no conclusion");
+    }
+
+    // ===== E11-02 hard timeout-victory (always ends) ===========================
+
+    @Test
+    void hardTimeoutConcludesWithTopRankedLeaderRegardlessOfActiveKind() {
+        // Active kind is DOMINATION and NOBODY meets its threshold, so without the hard
+        // timeout this match would run forever (board finding L3). hardTickLimit == 50.
+        BalanceProfile p = profile(VictoryKind.DOMINATION, true, false,
+                0.99, 100000, 0.99, 100000, 99, weights(), 50);
+        // tick == limit; no faction owns 99% of systems; beta leads on influence.
+        GameState s = state(50L,
+                Map.of(ALPHA, faction(ALPHA, 10), BETA, faction(BETA, 5000), GAMMA, faction(GAMMA, 0)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", BETA, List.of()),
+                        ownedSystem("s3", GAMMA, List.of()), neutralSystem("s4")),
+                List.of());
+        List<PublicEvent> events = new ArrayList<>();
+        GameState after = VictoryEvaluation.evaluate(s, p, events);
+        assertEquals(List.of(BETA), winners(events),
+                "the highest-scoring faction wins at the hard timeout");
+        assertEquals(GameStatus.CONCLUDED, after.status(), "the match concludes at the hard limit");
+    }
+
+    @Test
+    void hardTimeoutTieBreaksByFactionId() {
+        // Two factions with IDENTICAL weighted score (same 1 system, same influence) at the
+        // limit: the deterministic Scoring tie-break (faction id ascending) crowns ALPHA.
+        BalanceProfile p = profile(VictoryKind.DOMINATION, true, false,
+                0.99, 100000, 0.99, 100000, 99, weights(), 50);
+        GameState s = state(50L,
+                Map.of(ALPHA, faction(ALPHA, 100), BETA, faction(BETA, 100)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", BETA, List.of()),
+                        neutralSystem("s3")),
+                List.of());
+        assertEquals(List.of(ALPHA), winners(evaluate(s, p)),
+                "on an exact score tie the lowest faction id wins (alpha < beta)");
+    }
+
+    @Test
+    void hardTimeoutDoesNotFireBeforeTheLimit() {
+        BalanceProfile p = profile(VictoryKind.DOMINATION, true, false,
+                0.99, 100000, 0.99, 100000, 99, weights(), 50);
+        // tick 49 < 50: still RUNNING, no primary win -> no conclusion yet.
+        GameState s = state(49L,
+                Map.of(ALPHA, faction(ALPHA, 10), BETA, faction(BETA, 5000)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", BETA, List.of())),
+                List.of());
+        List<PublicEvent> events = new ArrayList<>();
+        GameState after = VictoryEvaluation.evaluate(s, p, events);
+        assertEquals(0, victories(events), "before the hard limit nothing is crowned");
+        assertEquals(GameStatus.RUNNING, after.status(), "match keeps running before the limit");
+    }
+
+    @Test
+    void disabledHardTimeoutNeverFires() {
+        // hardTickLimit == 0 (disabled): even far past any reasonable horizon, no fallback.
+        BalanceProfile p = profile(VictoryKind.DOMINATION, true, false,
+                0.99, 100000, 0.99, 100000, 99, weights(), 0);
+        GameState s = state(1_000_000L,
+                Map.of(ALPHA, faction(ALPHA, 10), BETA, faction(BETA, 5000)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", BETA, List.of())),
+                List.of());
+        List<PublicEvent> events = new ArrayList<>();
+        GameState after = VictoryEvaluation.evaluate(s, p, events);
+        assertEquals(0, victories(events), "a disabled hard timeout never crowns a winner");
+        assertEquals(GameStatus.RUNNING, after.status(), "a disabled timeout never concludes");
+    }
+
+    @Test
+    void primaryVictoryTakesPrecedenceOverHardTimeout() {
+        // Both fire on the same tick: ALPHA meets DOMINATION (2/2 systems) AND tick == limit.
+        // The primary condition must win, and BETA (which would top the timeout ranking on
+        // influence) must NOT be crowned.
+        BalanceProfile p = profile(VictoryKind.DOMINATION, true, false,
+                0.5, 100000, 0.99, 100000, 99, weights(), 50);
+        GameState s = state(50L,
+                Map.of(ALPHA, faction(ALPHA, 0), BETA, faction(BETA, 9999)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", ALPHA, List.of())),
+                List.of());
+        List<FactionId> w = winners(evaluate(s, p));
+        assertEquals(List.of(ALPHA), w, "the primary DOMINATION winner takes precedence at the limit");
+    }
+
+    @Test
+    void hardTimeoutIsDeterministicSameSnapshotSameWinner() {
+        BalanceProfile p = profile(VictoryKind.WONDER, true, true,
+                0.99, 100000, 0.99, 100000, 99, weights(), 50);
+        GameState s = state(50L,
+                Map.of(ALPHA, faction(ALPHA, 100), BETA, faction(BETA, 300), GAMMA, faction(GAMMA, 200)),
+                List.of(ownedSystem("s1", ALPHA, List.of()), ownedSystem("s2", BETA, List.of()),
+                        ownedSystem("s3", GAMMA, List.of())),
+                List.of());
+        assertEquals(describe(evaluate(s, p)), describe(evaluate(s, p)),
+                "same seed/snapshot -> identical timeout outcome");
+        // And the leader is exactly Scoring.rank's element 0 (id-tiebroken).
+        assertEquals(List.of(Scoring.rank(s, p).get(0).faction()), winners(evaluate(s, p)),
+                "the timeout winner is the canonical ranking leader");
     }
 
     // ===== scoring =============================================================

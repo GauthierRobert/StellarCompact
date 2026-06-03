@@ -27,7 +27,8 @@ seam; the authorization decision below does not change.
 /topic/games/{gameId}/events          PublicEventMessage { type, parties[], systemId?, tick }
                                         type ∈ { WarDeclared, TreatySigned, TreatyBroken, AllianceFormed,
                                                  SystemCaptured, BattleResolved, RouteEstablished,
-                                                 RouteRaided, FactionEliminated, VictoryAchieved }
+                                                 RouteRaided, FactionEliminated, VictoryAchieved,
+                                                 ColonyFounded, FirstContact, TechUnlocked }
 /topic/games/{gameId}/overlay         OverlayDelta  { asOfTick, changedSystems[] }   (thin pointer; resync detail via REST)
 /user/queue/faction/{factionId}/view  WorldView     (OWNER-ONLY; the Sovereign's fog-filtered perception each tick)
 ```
@@ -65,6 +66,34 @@ authoritatively server-side, defence-in-depth, with **default deny**:
 The per-faction view is always built through the authoritative `WorldViewBuilder`
 (own state in full, everyone else fog-limited). Raw `GameState` is never serialised to any
 client. An unowned seat (e.g. a bot) has no registered owner → nothing is published.
+
+## Public event kinds
+
+Every event carries `{ type, parties[], systemId?, tick }`. Payload semantics per kind:
+
+| `type` | `parties[]` | `systemId?` | emitted at (resolution step) |
+| --- | --- | --- | --- |
+| `WarDeclared` | `[declarer, target]` | — | DIPLOMATIC_STATE |
+| `TreatySigned` | signatories | — | DIPLOMATIC_STATE |
+| `TreatyBroken` | signatories | — | DIPLOMATIC_STATE |
+| `AllianceFormed` | allied signatories | — | DIPLOMATIC_STATE |
+| `SystemCaptured` | `[newOwner]` | captured system | COMBAT |
+| `BattleResolved` | `[attacker, defender]` | system (assault/interception) or — | COMBAT |
+| `RouteRaided` | `[raider, victim]` | — | INTERDICTION |
+| `FirstContact` | `[discoverer, contacted]` | system where contact occurred | DEVELOPMENT (Explore reveal) |
+| `TechUnlocked` | `[faction]` | — | DEVELOPMENT (research completes) |
+| `ColonyFounded` | `[coloniser]` | colonised system | COLONISATION |
+| `RouteEstablished` | `[owner]` | endpoint system | MARKET |
+| `FactionEliminated` | `[eliminated]` | — | EVENTS |
+| `VictoryAchieved` | `[winner]` | — | EVENTS |
+
+The three exploration/development milestones (`FirstContact`, `TechUnlocked`, `ColonyFounded`)
+were added by **E12-04** (P7d) so meaningful first-contact / tech / expansion milestones
+surface to the spectator feed and galaxy overlay. They are emitted deterministically during
+resolution (same seed + same action log ⇒ identical event stream, order included). The
+engine `TechUnlocked` payload additionally carries the unlocked `techId` (public tech web);
+`FirstContact` is recorded once per `(discoverer, system)` the first time a faction's Explore
+reveals a system owned by a different faction (the pure-engine proxy for fog overlap).
 
 ## Notes
 - The heavy star **tiles** come over HTTP/CDN, NOT this socket. The socket carries only

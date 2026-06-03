@@ -47,6 +47,10 @@ final class SovereignFixtures {
     static final SystemId SYS_A = new SystemId("sysA");
     static final SystemId SYS_B = new SystemId("sysB");
     static final SystemId SYS_NEUTRAL = new SystemId("sysN");
+    // E12-01 multi-tick plan: two distinct neutral expansion targets (lower-id first).
+    static final SystemId SYS_NEUTRAL2 = new SystemId("sysN2");
+    static final PlanetId PLANET_M1 = new PlanetId("planetM1");
+    static final FleetId FLEET_B = new FleetId("fleetB");
     static final PlanetId PLANET_A = new PlanetId("planetA");
     static final PlanetId PLANET_B = new PlanetId("planetB");
     static final PlanetId PLANET_N1 = new PlanetId("planetN1");
@@ -179,45 +183,158 @@ final class SovereignFixtures {
                 Map.of(FLEET_A, fleetAt(FLEET_A, ALPHA, SYS_NEUTRAL)));
     }
 
-    // === E10-02 build-ladder (F2) scenarios =====================================
-    // All three hold ample Minerals (>= the build floor) and a 3-slot empty planet,
-    // so the build step fires; only Energy/Food differ, so the chosen building TYPE
-    // is the only thing under test. ResourceBundle order is (energy, minerals, food,
-    // tech, influence).
+    // === E12-01 multi-tick plan (P7a) scenarios =================================
+    // The bot carries a committed expansion target across ticks. These fixtures drive
+    // the scout -> colonise -> fortify plan and its invalidation/recovery. The faction
+    // is poor so the build/ship rungs are skipped and only the plan-aware Colonise /
+    // Explore rungs fire (isolating the plan behaviour under test).
 
     /**
-     * ALPHA can afford to build (ample Minerals, a free slot) but its Energy stockpile
-     * is at/below the default Energy floor while Food is plentiful. The build-type
-     * heuristic must pick a SOLAR_ARRAY - the energy fix, finding F2 - over a MINE.
+     * E12-01: ALPHA poor, with two reachable colonisable neutrals - {@code SYS_NEUTRAL}
+     * ("sysN") and {@code SYS_NEUTRAL2} ("sysN2"), each carrying a planet and each with
+     * an idle ALPHA fleet parked at it. Both are colonisable this tick, so the bot must
+     * commit to the canonical (lowest-id) one, {@code SYS_NEUTRAL}, and keep colonising
+     * <em>it</em> across ticks rather than flip-flopping.
+     */
+    static GameState twoColonisableNeutralsState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, poor())),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3))),
+                        SYS_NEUTRAL, neutralSystemWithPlanets(SYS_NEUTRAL,
+                                List.of(emptyPlanet(PLANET_N1, 2))),
+                        SYS_NEUTRAL2, neutralSystemWithPlanets(SYS_NEUTRAL2,
+                                List.of(emptyPlanet(PLANET_M1, 2)))),
+                Map.of(FLEET_A, fleetAt(FLEET_A, ALPHA, SYS_NEUTRAL),
+                        FLEET_B, fleetAt(FLEET_B, ALPHA, SYS_NEUTRAL2)));
+    }
+
+    /**
+     * E12-01 invalidation: like {@link #twoColonisableNeutralsState()} but the
+     * lower-id target {@code SYS_NEUTRAL} has been <em>taken by BETA</em> (it is no
+     * longer neutral, and ALPHA's fleet is no longer parked there). The only live
+     * expansion target left is {@code SYS_NEUTRAL2}, still colonisable via {@code
+     * FLEET_B}. A bot that had committed to {@code SYS_NEUTRAL} must reconcile, forget
+     * it, and recover onto {@code SYS_NEUTRAL2}.
+     */
+    static GameState neutralTakenByRivalState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, poor()), BETA, faction(BETA, rich())),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3))),
+                        SYS_NEUTRAL, ownedSystem(SYS_NEUTRAL, BETA,
+                                List.of(emptyPlanet(PLANET_N1, 2))),
+                        SYS_NEUTRAL2, neutralSystemWithPlanets(SYS_NEUTRAL2,
+                                List.of(emptyPlanet(PLANET_M1, 2)))),
+                Map.of(FLEET_B, fleetAt(FLEET_B, ALPHA, SYS_NEUTRAL2)));
+    }
+
+    // === E10-02 build-ladder (F2) scenarios =====================================
+    // All three hold moderate Minerals (>= the build floor 50, but BELOW the E11-05
+    // ship-economy pivot 200) and a 3-slot empty planet, so the economy build step
+    // fires - not the shipyard pivot; only Energy/Food differ, so the chosen building
+    // TYPE is the only thing under test. ResourceBundle order is (energy, minerals,
+    // food, tech, influence).
+
+    /**
+     * ALPHA can afford to build (Minerals above the build floor yet below the
+     * ship-economy pivot, a free slot) but its Energy stockpile is at/below the default
+     * Energy floor while Food is plentiful. The build-type heuristic must pick a
+     * SOLAR_ARRAY - the energy fix, finding F2 - over a MINE.
      */
     static GameState energyStarvedBuildState() {
         return build(
-                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(0, 1000, 1000, 0, 0))),
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(0, 100, 1000, 0, 0))),
                 Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
                 Map.of());
     }
 
     /**
-     * ALPHA can afford to build, Energy is comfortably above the floor, but Food is
-     * at/below the default Food floor. The heuristic must pick a FARM over a MINE.
+     * ALPHA can afford to build (Minerals below the ship-economy pivot), Energy is
+     * comfortably above the floor, but Food is at/below the default Food floor. The
+     * heuristic must pick a FARM over a MINE.
      */
     static GameState foodStarvedBuildState() {
         return build(
-                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 1000, 0, 0, 0))),
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 100, 0, 0, 0))),
                 Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
                 Map.of());
     }
 
     /**
-     * ALPHA can afford to build and both Energy and Food are comfortably above their
-     * floors, so neither resource is under pressure: the heuristic falls through to the
-     * default MINE (the minerals engine).
+     * ALPHA can afford to build (Minerals below the ship-economy pivot) and both Energy
+     * and Food are comfortably above their floors, so neither resource is under pressure:
+     * the heuristic falls through to the default MINE (the minerals engine).
      */
     static GameState comfortableBuildState() {
         return build(
-                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 1000, 1000, 0, 0))),
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 100, 1000, 0, 0))),
                 Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
                 Map.of());
+    }
+
+    // === E11-05 ship/colony economy scenarios (finding L5 / decision P4) =========
+    // Minerals piled up PAST the bot's ship-economy threshold (200) - the
+    // unbounded-hoard symptom the live sim flagged - so the bot pivots from idle
+    // hoarding into the ship/colony growth path. ResourceBundle order is (energy,
+    // minerals, food, tech, influence).
+
+    /** A planet whose only slot holds an ACTIVE Shipyard (so the system has one). */
+    static Planet shipyardPlanet(PlanetId id) {
+        return new Planet(id, Biome.TERRAN, 1, 100,
+                List.of(new Building(0, BuildingType.SHIPYARD, BuildingStatus.ACTIVE, 0)));
+    }
+
+    /** An owned system carrying a Shipyard plus the given extra planets. */
+    static ActiveSystem shipyardSystem(SystemId id, FactionId owner, PlanetId shipyardPlanetId,
+                                       List<Planet> extra) {
+        List<Planet> planets = new java.util.ArrayList<>();
+        planets.add(shipyardPlanet(shipyardPlanetId));
+        planets.addAll(extra);
+        return new ActiveSystem(id, "name-" + id.value(), new Coords(0, 0),
+                Optional.of(owner), List.copyOf(planets), 100, 1.0);
+    }
+
+    /**
+     * E11-05 (a): ALPHA's Minerals have piled up past the ship-economy threshold and it
+     * owns NO Shipyard, but has a free slot. The bot must spend a slot on a SHIPYARD
+     * (the growth engine) rather than yet-another economy building. Energy/Food are
+     * plentiful so the economy-pressure heuristic does not muddy the choice.
+     */
+    static GameState mineralRichNoShipyardState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 5000, 1000, 1000, 0))),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
+                Map.of());
+    }
+
+    /**
+     * E11-05 (b): ALPHA is Mineral-rich, ALREADY owns a Shipyard, and has a reachable
+     * neutral (unowned) neighbour to expand toward (no idle fleet parked there yet, so
+     * it is not colonisable this tick). The bot must spend the hoard constructing a
+     * colony ship (BuildFleet) at the Shipyard system - the mineral sink. The owned
+     * Shipyard planet is full (single occupied slot) so no economy/shipyard build can
+     * pre-empt the ship-construction rung.
+     */
+    static GameState mineralRichWithShipyardAndNeutralState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 5000, 1000, 1000, 0))),
+                Map.of(SYS_A, shipyardSystem(SYS_A, ALPHA, PLANET_A, List.of()),
+                        SYS_NEUTRAL, neutralSystem(SYS_NEUTRAL)),
+                Map.of());
+    }
+
+    /**
+     * E11-05 ordering: ALPHA is Mineral-rich, owns a Shipyard (its home planet is full,
+     * so no build rung can pre-empt) AND has an idle fleet PARKED AT a neutral that
+     * carries planets - so that neutral is colonisable this tick. Colonise (finish
+     * expansion) must rank ahead of constructing yet-another colony ship.
+     */
+    static GameState shipyardWithFleetParkedAtColonisableNeutral() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 5000, 1000, 1000, 0))),
+                Map.of(SYS_A, shipyardSystem(SYS_A, ALPHA, PLANET_A, List.of()),
+                        SYS_NEUTRAL, neutralSystemWithPlanets(SYS_NEUTRAL,
+                                List.of(emptyPlanet(PLANET_N2, 2), emptyPlanet(PLANET_N1, 2)))),
+                Map.of(FLEET_A, fleetAt(FLEET_A, ALPHA, SYS_NEUTRAL)));
     }
 
     /** A spread of distinct states to prove the bot never throws on varied input. */
@@ -229,7 +346,12 @@ final class SovereignFixtures {
                 idleFleetParkedAtColonisableNeutral(),
                 energyStarvedBuildState(),
                 foodStarvedBuildState(),
-                comfortableBuildState());
+                comfortableBuildState(),
+                mineralRichNoShipyardState(),
+                mineralRichWithShipyardAndNeutralState(),
+                shipyardWithFleetParkedAtColonisableNeutral(),
+                twoColonisableNeutralsState(),
+                neutralTakenByRivalState());
     }
 
     // === Fog-of-war scenario (E3-02) ============================================

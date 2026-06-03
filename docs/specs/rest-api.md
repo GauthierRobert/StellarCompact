@@ -1,6 +1,9 @@
 # Spec — REST API (config, CRUD, tiles)
 
-Described contract only; no implementation. All under `/api`. Auth/session details deferred. JSON unless noted.
+Described contract only; no implementation. All under `/api`. JSON unless noted. A **dev
+authentication** flow (username-only JWT) is now implemented — see *Authentication (dev)* below;
+it replaces the `X-Owner-Token` stand-in as the preferred way to establish a `Principal`, and is
+designed to be swapped for Google OAuth later by changing only the token issuer/decoder.
 
 ## Galaxy tiles (the scale-critical endpoint)
 
@@ -84,7 +87,7 @@ GET /api/galaxy/{gameId}/overlay?bbox=minX,minY,maxX,maxY&sinceTick=N
 ## Match lifecycle
 
 ```
-POST /api/games                      { seed?, size?, factionCount?, tickIntervalMs?, victoryCondition?, balanceProfile? } → 201 GameSummary { gameId, gameSeed, status:CREATED, tick, balanceProfile, factions[] }
+POST /api/games                      { seed?, size?, factionCount?, tickIntervalMs?, victoryCondition?, balanceProfile?, seats? } → 201 GameSummary { gameId, gameSeed, status:CREATED, tick, balanceProfile, factions[] }
 GET  /api/games/{gameId}             → GameSummary
 POST /api/games/{gameId}/start       → GameSummary status:RUNNING
 POST /api/games/{gameId}/pause       → GameSummary status:PAUSED
@@ -101,6 +104,22 @@ Implemented contract (E6-01):
   unknown profile is `404`). The match starts in `CREATED`. `tickIntervalMs`/`size`/`victoryCondition`
   are accepted but informational (the active victory condition and gameplay numbers live in the
   balance profile, rule 6; tick pacing is orchestration timing, never an engine input — principle 1).
+- **Per-seat agent selection** (E11-04, 🔒 security-sensitive): the optional `seats` field is a
+  per-seat list of agent-type tokens from the **closed whitelist** `SCRIPTED` | `AGGRESSIVE` | `LLM`
+  (case-insensitive). It chooses which Sovereign sits each faction seat, in faction-id order
+  (`faction-1`, `faction-2`, …). Validation is the contract:
+  - **Whitelist only.** An unknown/blank token is rejected `400` (the body names the offending value
+    and the allowed set). Tokens are validated against the enum — a class name is **never** loaded
+    reflectively from request input (principle 5; no arbitrary instantiation).
+  - **Length.** When present, `seats.length` must equal the **clamped** `factionCount` (so each seat
+    maps unambiguously); otherwise `400`. An explicitly empty list `[]` is treated as "unspecified".
+  - **Default policy.** Omitted/empty ⇒ every seat is `SCRIPTED` (the existing all-scripted default;
+    the aggressive/LLM mix is opt-in).
+  - **`LLM` seats** are whitelisted but **not wired in this build** (the match API does not depend on
+    `agent-runtime`; no concrete LLM Sovereign adapter is on its classpath). An `LLM` seat is rejected
+    `400` ("LLM seats not available in this build") — never a silent fallback to a scripted bot.
+    Provider neutrality (Ollama default, principle 4) stays a config concern of `agent-runtime`, not
+    request input.
 - **Lifecycle transitions** are guarded by the engine `LifecycleTransitions` state machine (E1-15:
   `CREATED→LOBBY→RUNNING→(PAUSED↔RUNNING)→CONCLUDED→ARCHIVED`). `start` drives `CREATED→LOBBY→RUNNING`
   and kicks the tick loop; `pause` halts it (`RUNNING→PAUSED`); `resume` restarts it (`PAUSED→RUNNING`).
@@ -204,6 +223,52 @@ Implemented contract (E6-02 — security-sensitive, owner-only redaction):
   only present (non-null) fields are applied; the updated config feeds prompt assembly identically.
 - **Not cacheable.** Every config read carries `Cache-Control: no-store` (owner-sensitive; a shared
   cache must never serve one principal's owner view to another — defence in depth behind redaction).
+
+## Authentication (dev) — username-only JWT
+
+A deliberately thin, password-less identity flow for development. It establishes the `Principal`
+that every owner-gated surface already resolves (`resolveOwner` → owner-view STOMP gate). It is
+**forward-compatible with Google OAuth**: the API surface and the server-side trust decisions
+(`FactionOwnershipRegistry`, fog filtering) do not change — only the token *issuer* and *decoder*
+are swapped (mint via Google instead of `/api/auth/login`; verify Google's JWKS instead of the
+dev HMAC secret).
+
+```
+POST /api/auth/login   { username }                  → 200 { token, username, expiresAt, tokenType:"Bearer" }
+GET  /api/auth/me      (Authorization: Bearer <jwt>) → 200 { username }            | 401 if no/invalid token
+GET  /api/me/games     (Authorization: Bearer <jwt>) → 200 { username, games[] }   | 401 if no/invalid token
+```
+
+Implemented contract (dev auth):
+- **Login** (`POST /api/auth/login`) takes **only** a `username` (no password — dev). `username`
+  must match `^[A-Za-z0-9_.-]{1,32}$` (closed input; anything else → `400`). The server mints an
+  **HMAC-SHA256 (HS256)** JWT with claims `sub=<username>`, `iss=<configured issuer>`, `iat`, `exp`
+  (`exp = iat + configured TTL`, default 12h). Response: `{ token, username, expiresAt (ISO-8601),
+  tokenType:"Bearer" }`. The signing secret is config-only (`stellar-compact.auth.jwt.secret`),
+  never in the body or response. No user store: any well-formed username is accepted (a dev
+  convenience; Google OAuth will gate identity later).
+- **Bearer everywhere.** Authenticated calls carry `Authorization: Bearer <jwt>`. The resource
+  server decodes/verifies the HS256 signature + `exp`; on success the request `Principal` is the
+  `sub` claim, so the **existing** owner resolution (`Principal` wins over `X-Owner-Token`) makes a
+  logged-in user the owner of any seat they attach — **no controller change**. An invalid/expired
+  token on an authenticated endpoint is `401`.
+- **My games** (`GET /api/me/games`) is the dashboard read: a **reverse lookup** of the
+  `FactionOwnershipRegistry` for every seat the authenticated principal owns, enriched with each
+  match's live summary. Response: `{ username, games:[ { gameId, factionId, seatId, status, tick,
+  gameSeed, balanceProfile, factionCount } ] }`, ascending by `gameId`. `factionId` is the
+  `gameId:seatId` handle (subscribe key); `seatId` is the per-match seat (the STOMP owner-view id).
+  Only games where the caller owns a seat appear — no other game's private state is exposed.
+- **WebSocket handshake auth.** The STOMP handshake accepts `?access_token=<jwt>`; when present the
+  server **verifies** it (same decoder) and pins `Principal = sub`. This closes the prior dev hole
+  where `?principal=alice` was trusted verbatim — a spectator may still connect anonymously (no
+  token, no owner-view), but the owner-only `/user/queue/faction/{id}/view` requires a verified
+  token whose `sub` owns that faction (the `OwnerViewAuthorizationInterceptor` is unchanged).
+- **Endpoint protection (dev posture).** `POST /api/auth/**` and all public spectator reads
+  (`GET /api/games/**`, tiles, `/ws/**`) are open; `/api/me/**` and `GET /api/auth/me` require a
+  valid token. Config writes (`POST .../factions`, `PATCH /api/factions/**`) remain open at the
+  filter level and continue to resolve the owner from `Principal` → `X-Owner-Token` → null, so the
+  documented dev stand-in keeps working alongside JWT. Tightening these to token-required is a
+  one-line `authorizeHttpRequests` change once the frontend always logs in.
 
 ## Catalog / lookup
 

@@ -8,13 +8,14 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { GalaxyComponent } from '../galaxy/galaxy.component';
 import { EventsStore, type PublicEvent } from '../../stores/events.store';
 import { FactionStore, type FactionSnapshot } from '../../stores/faction.store';
 import { StompClientService } from '../../services/stomp-client.service';
 import { MatchRestClientService, type LeaderboardEntry } from '../../services/match-rest-client.service';
 import { ReplayClientService } from '../../services/replay-client.service';
+import { MatchPickerComponent } from './match-picker.component';
 
 /**
  * Spectator view — "AI as sport" mode (E7-06).
@@ -41,7 +42,7 @@ import { ReplayClientService } from '../../services/replay-client.service';
   selector: 'app-spectator',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [CommonModule, GalaxyComponent],
+  imports: [CommonModule, GalaxyComponent, MatchPickerComponent],
   template: `
     <div class="spectator-root">
       <!-- Base layer: galaxy renderer -->
@@ -64,7 +65,26 @@ import { ReplayClientService } from '../../services/replay-client.service';
         <span class="spec-conn" [class]="'spec-conn--' + connectionState()">
           {{ connectionState() }}
         </span>
+        <!-- Match-picker toggle (E11-08) -->
+        <button
+          type="button"
+          class="spec-matches-btn"
+          [class.spec-matches-btn--open]="matchPickerOpen()"
+          aria-label="Open match picker"
+          [attr.aria-expanded]="matchPickerOpen()"
+          (click)="toggleMatchPicker()"
+        >Matches</button>
       </div>
+
+      <!-- Match-picker dropdown panel (E11-08) -->
+      @if (matchPickerOpen()) {
+        <div class="spec-match-picker-anchor">
+          <app-match-picker
+            [activeGameId]="gameId()"
+            (matchSelected)="onMatchSelected($event)"
+          />
+        </div>
+      }
 
       <!-- Left panel: event timeline -->
       <div class="spec-events-panel">
@@ -430,10 +450,43 @@ import { ReplayClientService } from '../../services/replay-client.service';
       font-size: 10px; font-variant-numeric: tabular-nums;
       min-width: 70px; text-align: right; color: rgba(80,180,255,0.8);
     }
+    /* Match-picker toggle button (E11-08) */
+    .spec-matches-btn {
+      margin-left: 8px;
+      padding: 2px 9px;
+      font-family: 'Courier New', monospace;
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: rgba(80, 180, 255, 0.75);
+      background: rgba(80, 180, 255, 0.08);
+      border: 1px solid rgba(80, 180, 255, 0.25);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+      flex-shrink: 0;
+    }
+    .spec-matches-btn:hover {
+      background: rgba(80, 180, 255, 0.15);
+      border-color: rgba(80, 180, 255, 0.45);
+    }
+    .spec-matches-btn--open {
+      background: rgba(80, 180, 255, 0.18);
+      border-color: rgba(80, 180, 255, 0.55);
+      color: #b0d8f0;
+    }
+    /* Floating anchor for the match-picker dropdown (E11-08) */
+    .spec-match-picker-anchor {
+      position: absolute;
+      top: 36px;    /* just below the top bar */
+      right: 8px;
+      z-index: 40;
+      filter: drop-shadow(0 4px 16px rgba(0,3,12,0.85));
+    }
   `],
 })
 export class SpectatorComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly eventsStore = inject(EventsStore);
   private readonly factionStore = inject(FactionStore);
   private readonly stompClient = inject(StompClientService);
@@ -444,6 +497,14 @@ export class SpectatorComponent implements OnInit, OnDestroy {
   readonly gameId = signal<string>('');
   readonly seed = signal<string>('1');
   readonly rMax = signal<number>(1000);
+
+  // ---- match picker (E11-08) ----
+
+  /**
+   * Whether the match-picker dropdown is open.  Toggled by the "Matches" button
+   * in the top bar; automatically closed when a match is selected.
+   */
+  readonly matchPickerOpen = signal<boolean>(false);
 
   /**
    * Replay mode (E9-02): when the route has {@code ?replay} (or {@code ?replay=1}) the view is
@@ -564,6 +625,55 @@ export class SpectatorComponent implements OnInit, OnDestroy {
 
   onTogglePlay(): void {
     this.replay.toggle();
+  }
+
+  // ---- match picker (E11-08) ----
+
+  /** Toggle the match-picker dropdown open/closed. */
+  toggleMatchPicker(): void {
+    this.matchPickerOpen.update((open) => !open);
+  }
+
+  /**
+   * Handle a match selection from the picker panel.
+   *
+   * In replay mode, navigate to the selected game's spectate route with
+   * {@code ?replay} so the replay client is re-loaded.  In live mode, perform
+   * an in-page switch: disconnect STOMP from the old game, reset stores, then
+   * reconnect and re-poll REST for the new gameId so the spectator view updates
+   * without a full page reload.
+   *
+   * Also navigates the URL so the address bar reflects the new gameId and
+   * the user can bookmark or share the link.
+   */
+  onMatchSelected(gameId: string): void {
+    this.matchPickerOpen.set(false);
+
+    if (this.replayMode()) {
+      void this.router.navigate(['/spectate', gameId], {
+        queryParams: { replay: '1' },
+      });
+      return;
+    }
+
+    // Tear down the current live session.
+    this._stopLeaderboardPolling();
+    this.stompClient.disconnect();
+    this.matchRest.reset();
+    this.eventsStore.reset();
+    this.factionStore.reset();
+
+    // Point at the new game.
+    this.gameId.set(gameId);
+
+    // Update the browser URL so the address bar reflects the switch.
+    void this.router.navigate(['/spectate', gameId], { replaceUrl: true });
+
+    // Re-establish live data streams.
+    this.stompClient.connect({ gameId });
+    void this.matchRest.fetchGameSummary(gameId);
+    void this.matchRest.fetchLeaderboard(gameId);
+    this._startLeaderboardPolling(gameId);
   }
 
   // ---- leaderboard polling ----

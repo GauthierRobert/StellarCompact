@@ -11,8 +11,12 @@ import java.util.Optional;
  * (board card E1-16; game-design 03 step 11 "Public event emission",
  * docs/specs/websocket-protocol.md {@code /topic/games/{gameId}/events}).
  *
- * <p><b>What this is.</b> The closed set of ten event kinds every spectator and
- * Sovereign sees over the live WebSocket {@code events} topic. Each carries the spec
+ * <p><b>What this is.</b> The closed set of public event kinds every spectator and
+ * Sovereign sees over the live WebSocket {@code events} topic. The diplomacy/combat/
+ * economy/lifecycle kinds land in E1-16/E1-15; the exploration/development milestones
+ * ({@code ColonyFounded}, {@code FirstContact}, {@code TechUnlocked}) are added in E12-04
+ * (P7d) so meaningful expansion/contact/tech milestones surface to the feed + overlay.
+ * Each carries the spec
  * payload <em>field-for-field</em>: {@code { type, parties[], systemId?, tick }} -
  * {@link #type()} is the wire discriminator (the variant simple name), {@link #parties()}
  * the involved faction ids, {@link #systemId()} the system the event concerns (empty for
@@ -39,7 +43,8 @@ public sealed interface PublicEvent permits
         PublicEvent.WarDeclared, PublicEvent.TreatySigned, PublicEvent.TreatyBroken,
         PublicEvent.AllianceFormed, PublicEvent.SystemCaptured, PublicEvent.BattleResolved,
         PublicEvent.RouteEstablished, PublicEvent.RouteRaided, PublicEvent.FactionEliminated,
-        PublicEvent.VictoryAchieved {
+        PublicEvent.VictoryAchieved, PublicEvent.ColonyFounded, PublicEvent.FirstContact,
+        PublicEvent.TechUnlocked {
 
     /** Wire discriminator: the variant simple name (e.g. {@code "WarDeclared"}). */
     String type();
@@ -286,6 +291,98 @@ public sealed interface PublicEvent permits
         @Override
         public List<FactionId> parties() {
             return List.of(winner);
+        }
+
+        @Override
+        public Optional<SystemId> systemId() {
+            return Optional.empty();
+        }
+    }
+
+    // ===== exploration / development milestones (E12-04) ======================
+
+    /**
+     * A faction successfully colonised a system (parties = [coloniser], systemId set).
+     * Recorded at the COLONISATION step when a validated {@code Colonize} resolves -
+     * a public, galaxy-wide fact (the new colony is visible on the map), derived
+     * deterministically from the validated action (P7d: surfaces a meaningful expansion
+     * milestone to the spectator feed + galaxy overlay).
+     */
+    record ColonyFounded(FactionId coloniser, SystemId system, long tick) implements PublicEvent {
+        public ColonyFounded {
+            requireNonNull(coloniser, "ColonyFounded.coloniser");
+            requireNonNull(system, "ColonyFounded.system");
+        }
+
+        @Override
+        public String type() {
+            return "ColonyFounded";
+        }
+
+        @Override
+        public List<FactionId> parties() {
+            return List.of(coloniser);
+        }
+
+        @Override
+        public Optional<SystemId> systemId() {
+            return Optional.of(system);
+        }
+    }
+
+    /**
+     * Two factions made first contact: the {@code discoverer} revealed (via Explore) a
+     * system owned by another faction it had not previously known (parties =
+     * [discoverer, contacted], systemId = the system where contact occurred). Recorded
+     * once, deterministically, in the DEVELOPMENT step's Explore handler the first time
+     * the discoverer reveals an owned system - monotone within a match (P7d: surfaces the
+     * "first time two empires meet" milestone).
+     */
+    record FirstContact(FactionId discoverer, FactionId contacted, SystemId system, long tick)
+            implements PublicEvent {
+        public FirstContact {
+            requireNonNull(discoverer, "FirstContact.discoverer");
+            requireNonNull(contacted, "FirstContact.contacted");
+            requireNonNull(system, "FirstContact.system");
+        }
+
+        @Override
+        public String type() {
+            return "FirstContact";
+        }
+
+        @Override
+        public List<FactionId> parties() {
+            return List.of(discoverer, contacted);
+        }
+
+        @Override
+        public Optional<SystemId> systemId() {
+            return Optional.of(system);
+        }
+    }
+
+    /**
+     * A faction completed researching a tech (parties = [faction]). Recorded at the
+     * DEVELOPMENT step the tick a {@code RESEARCHING} node flips to {@code UNLOCKED} in
+     * the research advance sweep - a public milestone derived deterministically from the
+     * progress sweep (P7d). The tech id is carried as a plain string for the wire payload
+     * (the tech web is public knowledge); it is faction-scoped, so no system is set.
+     */
+    record TechUnlocked(FactionId faction, String techId, long tick) implements PublicEvent {
+        public TechUnlocked {
+            requireNonNull(faction, "TechUnlocked.faction");
+            requireNonNull(techId, "TechUnlocked.techId");
+        }
+
+        @Override
+        public String type() {
+            return "TechUnlocked";
+        }
+
+        @Override
+        public List<FactionId> parties() {
+            return List.of(faction);
         }
 
         @Override

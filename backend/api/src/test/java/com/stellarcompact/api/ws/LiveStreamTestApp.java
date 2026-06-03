@@ -1,6 +1,7 @@
 package com.stellarcompact.api.ws;
 
 import com.stellarcompact.api.match.InMemoryMatchService;
+import com.stellarcompact.api.security.SecurityConfig;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -14,10 +15,16 @@ import org.springframework.context.annotation.Import;
  * service, on an embedded server with auto-configuration (so the messaging/web infra
  * Spring AI bring-up is present). There is no production app in the api module; this is
  * test-only.
+ *
+ * <p>{@link SecurityConfig} is imported so the security starter (now on the api classpath
+ * for dev JWT auth) uses the project's permissive dev chain — {@code /ws/**} stays open — and
+ * provides the {@code JwtDecoder} the broker handshake consumes, instead of Boot's
+ * default lock-everything-down chain.
  */
 @SpringBootConfiguration
 @EnableAutoConfiguration
-@Import({WebSocketConfig.class, LiveStreamPublisher.class, InMemoryFactionOwnershipRegistry.class})
+@Import({WebSocketConfig.class, LiveStreamPublisher.class, InMemoryFactionOwnershipRegistry.class,
+        SecurityConfig.class})
 public class LiveStreamTestApp {
 
     @Bean

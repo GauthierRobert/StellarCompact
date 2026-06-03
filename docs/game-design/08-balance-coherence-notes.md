@@ -290,6 +290,13 @@ determinism baseline (items 4–5). The profiles are coherent as shipped.
 - [ ] Re-confirm the E10-05 starting-economy floor (§8) still leaves the bulge region able
       to seat `factionCount` homes after any change to biome weights, planet sizing, or
       `homePlacement.*`.
+- [ ] (E11, §9) If `MatchBootstrap` ever changes how many neutrals it materialises (currently
+      up to `factionCount`), re-derive the small-default DOMINATION `systemPct` against the new
+      active-system count so 0.6 stays reachable-but-not-trivial (and still fires the golden
+      replay only post-conquest).
+- [ ] (E11, §9) If `oceanic.energy` or `homePlacement.homeBiome` changes, re-check that a
+      starting home stays Energy-sustainable (a cradle solar array must out-produce marginal
+      producer upkeep) without becoming an Energy runaway.
 
 ---
 
@@ -367,3 +374,99 @@ makes *every* faction's economic start fairer (helping the diplomacy/economy pil
 starved faction could never pursue), and the F6 retune makes the prestige/economic win line
 honest without making it a sprint. Force still pays its built-in costs (variance, attrition,
 occupation unrest, reputation) documented in §2.
+
+---
+
+## 9. E11 — Victory reachability (L3) + home sustainability (L5) on the generated live map
+
+Applied in cards **E11-03** (victory-threshold reconcile) and **E11-06** (planet-slot/upkeep
+sustainability), closing findings L3/L5 of `docs/game-design/10-four-agent-live-sim-findings.md`.
+Both findings were artefacts of the **pre-E11-01 placeholder bootstrap** (disconnected 2-system
+pockets, planet-less neutrals, a single 3-slot home), not of the constants. E11-01 replaced that
+stub with the real galaxy generator; this pass re-derives the affected numbers against the
+*generated* map and changes exactly one shipped constant (`oceanic.energy`).
+
+### 9.1 L3 — Victory thresholds reconciled (E11-03): **no number changed; reachability documented**
+
+**Finding.** On the old 8-system stub a faction could own **at most 1** system (planet-less
+neutrals = nothing to colonise; disconnected pockets = nothing to conquer), so DOMINATION
+`systemPct 0.6` (needs ⌈0.6 × 8⌉ = 5) and `economic.influenceTarget 700` (1-capital `A/d`
+ceiling = `1.0/0.02 = 50`) were unreachable and every match ran forever.
+
+**Re-derivation against the generated small map.** `small-default` `factionCount 4` ⇒
+`MatchBootstrap.build` materialises **4 homes + up to 4 neutrals = 8 active systems**, one
+*connected* region, neutrals carrying real planet rosters. A faction can now own **1..8** systems
+via colonisation (4 colonisable neutrals) and conquest (rivals reachable). So:
+
+- **DOMINATION `systemPct 0.6` → KEPT.** Needs **5 of 8** (62.5%): reachable (sweep the neutrals
+  / conquer a rival / pool an alliance) but demanding real dominance over three rivals — the
+  intended "reachable-but-not-trivial". **0.5 was rejected:** ⌈0.5 × 8⌉ = 4 is double the fair
+  share of 2 ("biggest of four", not domination), and — decisively — a two-faction alliance owns
+  4 systems *at alliance-formation, before any conquest*, so 0.5 would let a coalition win on the
+  opening tick. 0.6 is also what the golden replay and `AggressiveMatchTest` are tuned against:
+  alpha+gamma reach 4 on alliance-formation but only clear 5 *after* capturing the beta systems,
+  so the scenario still exercises combat/capture/elimination before the win fires (lowering the
+  threshold would conclude those tests prematurely and break them).
+- **`economic.influenceTarget 700` → KEPT.** The E10-05 documented build (≈5 systems + 2
+  Monuments + trade + treaties → `A ≈ 15`, ceiling `750 ≥ 700`) is now *attainable* because "≈5
+  owned systems" is a real colonisation/conquest target on the generated map rather than the old
+  hard cap of 1. Alternative line (`active = DOMINATION`); still unreachable for an idle 1-capital
+  faction (ceiling 50) — correct.
+- **`large-persistent` → KEPT.** 16 systems; DOMINATION 0.65 ⇒ ⌈10.4⌉ = 11 of 16 (long-campaign,
+  and the *alternative* path under `active = SURVIVAL`); `economic 10000` is the E10-05 deep-empire
+  build. Coherent on the bigger generated map; unchanged.
+
+**Why no number moved.** The L3 unreachability was a *map* defect (L1/L2), fixed by E11-01. The
+guaranteed terminator is the **E11-02 active hard timeout** (`hardTickLimit 500 / 8000`): default
+scripted bots colonise but never war, so four scripted seats each end ~2 systems and nobody hits
+5 — the timeout then concludes with the deterministic `Scoring.rank` leader. DOMINATION/ECONOMIC
+are reachable *aspirations* for aggressive/LLM seats; the timeout is the floor that makes every
+match end. This is internally coherent and needs no threshold change — only the documentation that
+the generator (not a new constant) closed L3.
+
+### 9.2 L5 — Home sustainability (E11-06): **`oceanic.energy` 0.0 → 1.0 (both profiles)**
+
+**Finding.** A starting home bled Energy monotonically (5000 → 1513 over ~874 ticks, trending to
+deficit). Root cause: the mandated cradle biome `oceanic` had `energy = 0.0`, and a `SOLAR_ARRAY`
+produces `biome.energy × popFactor`, so a solar array on the *guaranteed* (oceanic) home planet
+produced **nothing**. The bot's E10-02 "SOLAR_ARRAY-when-low" heuristic therefore could not fix
+the deficit — every mine/farm/lab (1–2 Energy/tick upkeep) drained Energy with no in-home source.
+
+**Fix (least-invasive, config-only).** `oceanic.energy: 0.0 → 1.0` in **both** profiles (parallel;
+oceanic food stays 6.0 small / 8.0 large). Because `homePlacement.homeBiome = oceanic`, *every*
+home now has a dependable Energy source: a cradle solar array yields `1.0 × popFactor` (≈1.5 at the
+food-rich cradle's typical population), covering several producers' upkeep. The energy-floor
+heuristic now genuinely self-corrects, so the home stabilises around the floor with a balanced
+mine/solar mix instead of bleeding out.
+
+- **Sustainable, not runaway.** Per-planet Energy is bounded by `popFactor × slot count`; solar
+  arrays compete with mines/farms for finite slots; Energy is not an Influence/victory resource —
+  no snowball. The economy still pressures expansion (minerals hoard until the E11-05 shipyard
+  sink; more systems = more slots) and the **E10-04 brownout intent is preserved** (over-mine and
+  neglect solar ⇒ still brown out; the home just now has a viable *in-home* recovery path).
+- **Coherence.** Mine taper (F3) and brownout (F2) untouched. The E10-05 `minHomeBiomeYield` is the
+  *aggregate* base yield across all four resources, so the oceanic cradle's contribution rises
+  6.0 → 7.0: the floor gets marginally *easier* to clear (more homes qualify), never harder, and
+  the relative `qualityToleranceFraction` guard is unchanged.
+
+### 9.3 Test/golden-hash impact (for the orchestrator's suite run)
+
+- **Engine tests that load the shipped `small-default.json` use no `OCEANIC` planet for a
+  production assertion** (`EconomyResolutionTest` exercises TERRAN/ARID/VOLCANIC/FROZEN/DESERT;
+  `ReplayScenario` uses ARID/TERRAN/TOXIC). So the `oceanic.energy` change perturbs **no** golden
+  economy value or replay hash. `BalanceProfileTest`/`ProgressionConfigTest` assert ranges and the
+  `large > small` influence/tick relations only — all still hold.
+- **No victory threshold moved**, so `GoldenReplayDeterminismTest` (DOMINATION fires post-conquest)
+  and `AggressiveMatchTest` (DOMINATION at 60% after total capture) are unaffected.
+- `VictoryEvaluationTest` builds its own per-test profiles (not the shipped JSON); a new
+  `dominationReachableOnEightSystemGeneratedSmallMap` case documents the 5-of-8 reconciliation. It
+  asserts at-and-below the 0.6 boundary on an 8-system snapshot — no existing case changed.
+
+### 9.4 Net effect on the 50/50 balance
+
+Neither change favours force over diplomacy. The Energy fix makes *every* faction's home
+sustainable (it helps the economy/diplomacy pillars a starved home could never pursue, exactly as
+the E10-05 floor did), and the victory reconciliation leaves all win lines exactly where E10-05
+documented them — now genuinely reachable because the map, not the number, was the blocker. Force
+still pays its built-in costs (variance, two-sided attrition, occupation unrest, reputation,
+exhaustion) per §2.

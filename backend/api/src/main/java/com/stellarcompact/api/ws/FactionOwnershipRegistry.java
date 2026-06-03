@@ -2,6 +2,8 @@ package com.stellarcompact.api.ws;
 
 import com.stellarcompact.engine.state.FactionId;
 
+import java.util.List;
+
 /**
  * The authoritative server-side answer to "may this principal see this Sovereign's
  * private WorldView?" (board card E6-04, the security crux; principle 2 - agents and
@@ -37,4 +39,20 @@ public interface FactionOwnershipRegistry {
      *     the owner's user queue.
      */
     String ownerOf(String gameId, FactionId faction);
+
+    /**
+     * Reverse lookup: every {@code (gameId, faction)} owned by {@code principalName}, in
+     * ascending {@code (gameId, factionId)} order. Backs the {@code GET /api/me/games}
+     * dashboard — the only games a logged-in user is shown are the ones they own a seat in.
+     * Returns an empty list for a {@code null}/unknown principal (default deny).
+     */
+    List<OwnedFaction> factionsOwnedBy(String principalName);
+
+    /**
+     * A single ownership edge: the principal owns {@code faction} in {@code gameId}. The
+     * {@code gameId:factionId} pair reconstructs the config handle the owner uses to read
+     * its seat and to subscribe to its owner-only WorldView queue.
+     */
+    record OwnedFaction(String gameId, FactionId faction) {
+    }
 }

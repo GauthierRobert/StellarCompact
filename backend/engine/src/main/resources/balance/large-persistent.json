@@ -3,7 +3,7 @@
   "version": 1,
   "resources": {
     "biomeYields": {
-      "oceanic":  { "energy": 0.0, "minerals": 0.0, "food": 8.0, "tech": 0.0, "influence": 0.0 },
+      "oceanic":  { "energy": 1.0, "minerals": 0.0, "food": 8.0, "tech": 0.0, "influence": 0.0 },
       "terran":   { "energy": 1.0, "minerals": 1.0, "food": 5.0, "tech": 0.0, "influence": 0.0 },
       "arid":     { "energy": 1.0, "minerals": 5.0, "food": 1.0, "tech": 0.0, "influence": 0.0 },
       "volcanic": { "energy": 4.0, "minerals": 6.0, "food": 0.0, "tech": 0.0, "influence": 0.0 },
@@ -219,6 +219,7 @@
     "diplomatic": { "allianceMajorityPct": 0.65 },
     "survival": { "tickLimit": 5000 },
     "wonder": { "stages": 5, "holdTicks": 150 },
+    "hardTickLimit": 8000,
     "scoreWeights": {
       "systems": 3.0,
       "influence": 2.0,

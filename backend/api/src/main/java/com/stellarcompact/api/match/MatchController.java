@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * The match-lifecycle REST surface (board card E6-01; rest-api spec, section Match
  * lifecycle). Thin controllers over the {@link MatchService} seam:
@@ -49,6 +51,17 @@ public class MatchController {
 
     public MatchController(MatchService matches) {
         this.matches = matches;
+    }
+
+    /**
+     * List all matches (public summaries, ascending by gameId). Allows the spectator UI to
+     * discover a running demo match without knowing its id in advance (E11-07). An empty
+     * registry returns an empty list (200 OK); the caller decides what to do when there are
+     * no running matches yet.
+     */
+    @GetMapping
+    public ResponseEntity<List<GameSummary>> list() {
+        return noStore(ResponseEntity.ok()).body(matches.list());
     }
 
     @PostMapping

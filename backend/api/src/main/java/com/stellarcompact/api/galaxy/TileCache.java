@@ -1,5 +1,6 @@
 package com.stellarcompact.api.galaxy;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -44,6 +45,7 @@ public class TileCache {
     private final ReentrantLock lock = new ReentrantLock();
     private final Map<Key, TilePayload> entries;
 
+    @Autowired
     public TileCache(TileGenerator generator, ActiveSystemIndex activeSystems) {
         this(generator, activeSystems, DEFAULT_CAPACITY);
     }

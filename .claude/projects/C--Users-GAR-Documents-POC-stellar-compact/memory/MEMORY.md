@@ -1,1 +1,2 @@
 - [Backend JDK 25 build](backend-jdk25-build.md) — JDK 25 isn't the system default; set JAVA_HOME for every mvn run
+- [Parallel integration gotchas](build-and-parallel-integration-gotchas.md) — EOL/no-.gitattributes breaks git merge-file; worktree agents branch from a stale (uncommitted-work-missing) HEAD

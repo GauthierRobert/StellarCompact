@@ -5,6 +5,7 @@ import com.stellarcompact.engine.action.AttackTarget;
 import com.stellarcompact.engine.config.BalanceProfile;
 import com.stellarcompact.engine.config.BalanceProfileLoader;
 import com.stellarcompact.engine.state.ActiveSystem;
+import com.stellarcompact.engine.state.Biome;
 import com.stellarcompact.engine.state.Coords;
 import com.stellarcompact.engine.state.Faction;
 import com.stellarcompact.engine.state.FactionId;
@@ -14,7 +15,12 @@ import com.stellarcompact.engine.state.FleetStance;
 import com.stellarcompact.engine.state.GameState;
 import com.stellarcompact.engine.state.GameStatus;
 import com.stellarcompact.engine.state.PhysicalResource;
+import com.stellarcompact.engine.state.Planet;
+import com.stellarcompact.engine.state.PlanetId;
 import com.stellarcompact.engine.state.ResourceBundle;
+import com.stellarcompact.engine.state.TechId;
+import com.stellarcompact.engine.state.TechProgress;
+import com.stellarcompact.engine.state.TechStatus;
 import com.stellarcompact.engine.state.Route;
 import com.stellarcompact.engine.state.RouteId;
 import com.stellarcompact.engine.state.RouteKind;
@@ -261,6 +267,117 @@ class PublicEventTest {
     }
 
     // ---- helper ---------------------------------------------------------------
+
+    // ---- E12-04 milestone events (ColonyFounded / FirstContact / TechUnlocked) ----
+
+    private static final SystemId NEUTRAL = new SystemId("neutral-sys");
+    private static final PlanetId NEUTRAL_PLANET = new PlanetId("neutral-planet");
+    private static final FleetId COLONY_FLEET = new FleetId("alpha-colony");
+    private static final SystemId BETA_HOME = new SystemId("beta-home");
+    private static final TechId EXTRACTION = new TechId("improvedExtraction");
+
+    /**
+     * A self-contained scenario for the three E12-04 milestones. ALPHA: colonises a neutral
+     * planet (ColonyFounded at COLONISATION); explores BETA's home system for the first time
+     * (FirstContact in the DEVELOPMENT step's Explore handler); and has a tech one tick from
+     * completing (TechUnlocked in the DEVELOPMENT research advance). GAMMA is idle. Lifecycle
+     * switches off so the quiet factions emit nothing else.
+     */
+    private static GameState milestoneState() {
+        ActiveSystem neutral = new ActiveSystem(NEUTRAL, "Neutral", new Coords(5, 5),
+                Optional.empty(),
+                List.of(new Planet(NEUTRAL_PLANET, Biome.TERRAN, 3, 0, List.of())),
+                0, 1.0);
+        ActiveSystem betaHome = new ActiveSystem(BETA_HOME, "Beta Home", new Coords(9, 9),
+                Optional.of(BETA), List.of(), 0, 1.0);
+        Fleet colony = new Fleet(COLONY_FLEET, ALPHA, Optional.of(NEUTRAL), Optional.empty(),
+                FleetStance.DEFENSIVE, List.of(new Ship("freighter", 1)));
+
+        // ALPHA is one tick from finishing improvedExtraction (time 5 in small-default).
+        Faction alpha = new Faction(ALPHA, "F-alpha", 0.0,
+                new ResourceBundle(1000, 1000, 1000, 1000, 1000),
+                Map.of(EXTRACTION, new TechProgress(EXTRACTION, TechStatus.RESEARCHING, 4)),
+                Set.of(), Set.of());
+
+        return new GameState(SEED, TICK, GameStatus.RUNNING, "small-default", 1,
+                Map.of(ALPHA, alpha, BETA, faction(BETA), GAMMA, faction(GAMMA)),
+                Map.of(NEUTRAL, neutral, BETA_HOME, betaHome),
+                Map.of(COLONY_FLEET, colony),
+                Map.of(), Map.of(), Map.of(), Set.of());
+    }
+
+    @Test
+    void emitsColonyFoundedFirstContactAndTechUnlockedInResolutionStepOrder() {
+        List<SubmittedAction> b = new ArrayList<>();
+        b.add(new SubmittedAction(ALPHA, new Action.Explore(BETA_HOME), 0));
+        b.add(new SubmittedAction(ALPHA, new Action.Colonize(NEUTRAL_PLANET, COLONY_FLEET), 1));
+        ResolveResult result =
+                Resolver.resolveResult(milestoneState(), b, SMALL_NO_LIFECYCLE, SEED);
+        List<PublicEvent> events = result.events();
+
+        // FirstContact: discoverer ALPHA reaches BETA's owned home system.
+        PublicEvent.FirstContact contact = single(events, PublicEvent.FirstContact.class);
+        assertEquals(List.of(ALPHA, BETA), contact.parties());
+        assertEquals(Optional.of(BETA_HOME), contact.systemId());
+        assertEquals(TICK, contact.tick());
+
+        // TechUnlocked: improvedExtraction completes this tick (progress 4 -> 5 = time).
+        PublicEvent.TechUnlocked unlocked = single(events, PublicEvent.TechUnlocked.class);
+        assertEquals(List.of(ALPHA), unlocked.parties());
+        assertEquals("improvedExtraction", unlocked.techId());
+        assertEquals(Optional.empty(), unlocked.systemId());
+
+        // ColonyFounded: ALPHA colonises the neutral planet's host system.
+        PublicEvent.ColonyFounded founded = single(events, PublicEvent.ColonyFounded.class);
+        assertEquals(List.of(ALPHA), founded.parties());
+        assertEquals(Optional.of(NEUTRAL), founded.systemId());
+
+        // Fixed resolution-step order: DEVELOPMENT runs its action-driven begins
+        // (Explore -> FirstContact) before its passive research advance (-> TechUnlocked),
+        // then COLONISATION (-> ColonyFounded) in the next step.
+        assertEquals(List.of("FirstContact", "TechUnlocked", "ColonyFounded"),
+                events.stream().map(PublicEvent::type).toList(),
+                "milestones emit in the fixed resolution-step order");
+    }
+
+    @Test
+    void firstContactFiresOnlyOnceAcrossRepeatedExplores() {
+        // Reveal BETA's home; the faction now has it in exploredSystems. A second Explore of
+        // the same system in a later tick must NOT re-emit FirstContact (monotone reveal).
+        List<SubmittedAction> first = List.of(
+                new SubmittedAction(ALPHA, new Action.Explore(BETA_HOME), 0));
+        ResolveResult afterFirst =
+                Resolver.resolveResult(milestoneState(), first, SMALL_NO_LIFECYCLE, SEED);
+        assertEquals(1,
+                afterFirst.events().stream().filter(PublicEvent.FirstContact.class::isInstance).count(),
+                "first Explore of an owned system emits FirstContact once");
+
+        ResolveResult afterSecond =
+                Resolver.resolveResult(afterFirst.state(), first, SMALL_NO_LIFECYCLE, SEED);
+        assertTrue(afterSecond.events().stream().noneMatch(PublicEvent.FirstContact.class::isInstance),
+                "re-Exploring an already-revealed system emits no second FirstContact");
+    }
+
+    @Test
+    void exploringAnUnownedSystemEmitsNoFirstContact() {
+        // Exploring a NEUTRAL (unowned) system is a discovery but not a first contact.
+        List<SubmittedAction> b = List.of(
+                new SubmittedAction(ALPHA, new Action.Explore(NEUTRAL), 0));
+        ResolveResult result =
+                Resolver.resolveResult(milestoneState(), b, SMALL_NO_LIFECYCLE, SEED);
+        assertTrue(result.events().stream().noneMatch(PublicEvent.FirstContact.class::isInstance),
+                "an unowned system reveal is not a first contact");
+    }
+
+    @Test
+    void milestoneEventStreamIsDeterministicPerSeed() {
+        List<SubmittedAction> b = List.of(
+                new SubmittedAction(ALPHA, new Action.Explore(BETA_HOME), 0),
+                new SubmittedAction(ALPHA, new Action.Colonize(NEUTRAL_PLANET, COLONY_FLEET), 1));
+        List<PublicEvent> a = Resolver.resolveResult(milestoneState(), b, SMALL_NO_LIFECYCLE, SEED).events();
+        List<PublicEvent> c = Resolver.resolveResult(milestoneState(), b, SMALL_NO_LIFECYCLE, SEED).events();
+        assertEquals(a, c, "same seed + same ordered actions -> identical milestone event stream");
+    }
 
     private static <T extends PublicEvent> T single(List<PublicEvent> events, Class<T> kind) {
         List<T> matches = events.stream().filter(kind::isInstance).map(kind::cast).toList();

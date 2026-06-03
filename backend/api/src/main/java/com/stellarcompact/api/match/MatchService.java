@@ -33,6 +33,12 @@ public interface MatchService {
     GameSummary create(CreateGameRequest request);
 
     /**
+     * List all known matches (public summaries, in ascending gameId order). Used by the
+     * spectator UI to discover a running demo match without knowing its id in advance.
+     */
+    java.util.List<GameSummary> list();
+
+    /**
      * @return the match's public summary.
      * @throws MatchNotFoundException if no such match
      */

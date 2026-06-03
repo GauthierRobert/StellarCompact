@@ -61,6 +61,49 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.factions.length()").value(3));
     }
 
+    // ===== E11-04: per-seat agent-type selection over the wire ==================
+
+    @Test
+    void createWithValidSeatMixIsCreated() throws Exception {
+        // A whitelisted per-seat mix (scripted + aggressive) creates the match; the seat
+        // tokens are validated against the closed enum before any Sovereign is built.
+        mvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"factionCount\":2,\"seats\":[\"SCRIPTED\",\"AGGRESSIVE\"]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("CREATED"))
+                .andExpect(jsonPath("$.factions.length()").value(2));
+    }
+
+    @Test
+    void createWithUnknownSeatTypeIs400() throws Exception {
+        // An out-of-whitelist token is rejected with a 400 (never default-through). The
+        // IllegalArgumentException handler maps it; the body names the offending token.
+        mvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"factionCount\":2,\"seats\":[\"SCRIPTED\",\"OVERLORD\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(Matchers.containsString("OVERLORD")));
+    }
+
+    @Test
+    void createWithLlmSeatIs400Unavailable() throws Exception {
+        // LLM is whitelisted but unwired in this build: a clear 400, not a silent fallback.
+        mvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"factionCount\":2,\"seats\":[\"LLM\",\"SCRIPTED\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(Matchers.containsString("LLM")));
+    }
+
+    @Test
+    void createWithSeatsLengthMismatchIs400() throws Exception {
+        mvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"factionCount\":3,\"seats\":[\"SCRIPTED\",\"AGGRESSIVE\"]}"))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
     void getUnknownGameIs404() throws Exception {
         mvc.perform(get("/api/games/{id}", "does-not-exist"))
@@ -136,19 +179,22 @@ class MatchControllerTest {
     @Test
     void stateReadIsFogCorrectPerRequester() throws Exception {
         String id = createGame();
-        // faction-1 sees ITS OWN home in full, but NOT faction-2's home (no lane between
-        // homes in the bootstrap => not in faction-1's sensor reach => fog hides it).
+        // faction-1 sees ITS OWN (galaxy-generated, sys-*) systems in full. In the E11-01
+        // connected region a rival may be perceptible, but only as a fog-limited neighbour
+        // that carries no private economy (stockpiles live on SelfView, never NeighbourView).
         String body = mvc.perform(get("/api/games/{id}/state", id).param("requester", "faction-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.self.id").value("faction-1"))
-                .andExpect(jsonPath("$.ownSystems[*].id", Matchers.hasItem("home-1")))
-                .andExpect(jsonPath("$.ownSystems[*].id", Matchers.not(Matchers.hasItem("home-2"))))
-                // faction-2's home must not appear anywhere in faction-1's view (default-deny fog).
-                .andExpect(jsonPath("$.neighbours[*].systemId", Matchers.not(Matchers.hasItem("home-2"))))
+                .andExpect(jsonPath("$.self.stockpiles").exists())
+                .andExpect(jsonPath("$.ownSystems[0].id").exists())
+                .andExpect(jsonPath("$.ownSystems[*].id",
+                        Matchers.everyItem(Matchers.startsWith("sys-"))))
                 .andReturn().getResponse().getContentAsString();
-        // Hard assertion: faction-2's home id appears nowhere in the serialized view.
-        org.junit.jupiter.api.Assertions.assertFalse(body.contains("home-2"),
-                "fog leak: faction-2 home present in faction-1 view: " + body);
+        // Hard fog assertion: exactly ONE stockpiles block (faction-1's own self). A rival's
+        // full economic state leaking into the view would add another.
+        int stockpilesBlocks = body.split("\"stockpiles\"", -1).length - 1;
+        org.junit.jupiter.api.Assertions.assertEquals(1, stockpilesBlocks,
+                "fog leak: expected only faction-1's own stockpiles in the view: " + body);
     }
 
     @Test

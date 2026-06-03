@@ -152,9 +152,10 @@ final class DevelopmentResolution {
      * configured time. Visits factions, systems and planets in stable id order so
      * the fold is replay-stable.
      */
-    static GameState advance(GameState state, BalanceProfile profile) {
+    static GameState advance(GameState state, BalanceProfile profile, long tick,
+                             List<PublicEvent> events) {
         GameState next = advanceConstructionAndTerraform(state, profile);
-        next = advanceResearch(next, profile);
+        next = advanceResearch(next, profile, tick, events);
         return next;
     }
 
@@ -236,12 +237,15 @@ final class DevelopmentResolution {
         return new Planet(planet.id(), biome, planet.slotsTotal(), planet.population(), result);
     }
 
-    private static GameState advanceResearch(GameState state, BalanceProfile profile) {
+    private static GameState advanceResearch(GameState state, BalanceProfile profile, long tick,
+                                             List<PublicEvent> events) {
         Map<String, Integer> times = profile.tech().times();
         GameState next = state;
         for (FactionId fid : sortedFactionIds(state)) {
             Faction faction = next.factions().get(fid);
             Map<TechId, TechProgress> updated = null;
+            // Visit techs in stable id order so any TechUnlocked events emit in a
+            // deterministic, replay-stable sequence (faction id, then tech id).
             for (TechId techId : sortedTechIds(faction)) {
                 TechProgress tp = faction.techProgress().get(techId);
                 if (tp.status() != TechStatus.RESEARCHING) {
@@ -249,13 +253,20 @@ final class DevelopmentResolution {
                 }
                 int time = times.getOrDefault(techId.value(), 0);
                 int progress = tp.progress() + 1;
-                TechProgress advanced = progress >= time
+                boolean completes = progress >= time;
+                TechProgress advanced = completes
                         ? new TechProgress(techId, TechStatus.UNLOCKED, 0)
                         : new TechProgress(techId, TechStatus.RESEARCHING, progress);
                 if (updated == null) {
                     updated = new LinkedHashMap<>(faction.techProgress());
                 }
                 updated.put(techId, advanced);
+                if (completes) {
+                    // E12-04 P7d: a completed tech is a public milestone. Emitted
+                    // deterministically here (pure function of progress + config), in
+                    // faction-id-then-tech-id order, on the tick the node unlocks.
+                    events.add(new PublicEvent.TechUnlocked(fid, techId.value(), tick));
+                }
             }
             if (updated != null) {
                 next = next.withFaction(faction.withTechProgress(updated));

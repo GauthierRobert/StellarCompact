@@ -14,6 +14,20 @@
     <name>Stellar Compact :: app</name>
     <description>Spring Boot entry point wiring all modules together.</description>
 
+    <properties>
+        <!--
+          The full-context smoke test (ApplicationContextSmokeTest) boots the whole
+          production bean graph, which loads the orchestrator's classes. The orchestrator
+          is compiled with &#45;-enable-preview (Java 25 StructuredTaskScope), so its class
+          files carry the preview minor version (0xFFFF) and the JVM rejects them at load
+          time unless the test JVM also runs with &#45;-enable-preview. The parent reactor's
+          surefire config injects ${preview.surefire.arg} into the test JVM argLine; we opt
+          this module's tests in here. Compilation stays non-preview - nothing in this
+          module's own sources uses a preview API.
+        -->
+        <preview.surefire.arg>--enable-preview</preview.surefire.arg>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.stellarcompact</groupId>
@@ -40,6 +54,27 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          Full-context smoke test datasource (E11-10): the production context
+          autoconfigures a DataSource + Flyway against PostgreSQL, so the context can
+          only refresh against a real database. We REUSE the persistence module's
+          established Testcontainers pattern (a postgres:16-alpine container, gated on
+          Docker) rather than inventing an embedded/H2 path. Versions come from the
+          testcontainers-bom imported transitively via the Spring Boot BOM, exactly as
+          in the persistence pom. The postgresql JDBC driver is already on the test
+          classpath transitively (compile scope) from the persistence dependency.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

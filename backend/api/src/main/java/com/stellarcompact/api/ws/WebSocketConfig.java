@@ -1,8 +1,10 @@
 package com.stellarcompact.api.ws;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -43,23 +45,32 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final FactionOwnershipRegistry ownership;
+    private final JwtDecoder jwtDecoder;
 
-    public WebSocketConfig(FactionOwnershipRegistry ownership) {
+    /**
+     * @param jwtDecoder the dev-auth token verifier (from {@code SecurityConfig}); supplied via
+     *     {@link ObjectProvider} so a slim test context without security still wires the broker
+     *     ({@code getIfAvailable()} yields {@code null}, and the handshake falls back to the
+     *     legacy {@code ?principal=} stand-in).
+     */
+    public WebSocketConfig(FactionOwnershipRegistry ownership, ObjectProvider<JwtDecoder> jwtDecoder) {
         this.ownership = ownership;
+        this.jwtDecoder = jwtDecoder.getIfAvailable();
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Pin the session principal + gameId at the handshake (server-held identity).
+        // Pin the session principal + gameId at the handshake (server-held identity); a
+        // verified ?access_token= sub wins over the legacy ?principal= stand-in.
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                .setHandshakeHandler(HandshakeContext.handshakeHandler())
-                .addInterceptors(HandshakeContext.handshakeInterceptor())
+                .setHandshakeHandler(HandshakeContext.handshakeHandler(jwtDecoder))
+                .addInterceptors(HandshakeContext.handshakeInterceptor(jwtDecoder))
                 .withSockJS();
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                .setHandshakeHandler(HandshakeContext.handshakeHandler())
-                .addInterceptors(HandshakeContext.handshakeInterceptor());
+                .setHandshakeHandler(HandshakeContext.handshakeHandler(jwtDecoder))
+                .addInterceptors(HandshakeContext.handshakeInterceptor(jwtDecoder));
     }
 
     @Override

@@ -91,9 +91,27 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E10-05** Fairness: starting-economy floor + reconcile economic-victory target (F4/F6) — *deps: E2-04, E1-15* — game-balance-designer
 - ✅ **E10-06** 🔒 Validation: reject redundant Explore of a revealed system (F1) — *deps: E1-04, E3-02* — game-engine-developer (security sign-off via X-01)
 
+## E11 — Make the live match a real game (from 4-agent live-server sim → `docs/game-design/10-four-agent-live-sim-findings.md`)
+- ✅ **E11-01** Swap `MatchBootstrap` stub for galaxy-generated live bootstrap (connected region, planeted neutrals, fair homes) (L1/L2/L4) — *deps: E2-05, E6-01* — game-engine-developer
+- ✅ **E11-02** Active timeout-victory + deterministic score tie-break so matches end (L3) — *deps: E1-15* — game-balance-designer
+- ✅ **E11-03** Reconcile DOMINATION/economic victory thresholds against the generated map (L3) — *deps: E11-01, E1-15* — game-balance-designer
+- ✅ **E11-04** 🔒 Per-seat agent-type selection in match API (SCRIPTED/AGGRESSIVE/LLM, whitelisted) (L6) — *deps: E6-01, E10-03, E4-05* — agent-runtime-developer (security sign-off via X-01 pass #3)
+- ✅ **E11-05** Scripted bot: shipyard→ship→colonise economy, spend minerals (L5) — *deps: E11-01* — agent-runtime-developer
+- ✅ **E11-06** Balance: planet-slot count vs upkeep so a home isn't permanently energy-negative (L5) — *deps: E10-04* — game-balance-designer
+- ✅ **E11-07** Demo-match autostart profile + spectator defaults to it (P5) — *deps: E6-01, E7-06* — frontend-developer
+- ✅ **E11-08** Match-picker + create controls in spectator HUD (P5) — *deps: E11-07* — frontend-developer
+- ✅ **E11-09** One-command local run (compose Postgres + run scripts, `--enable-preview`, datasource env) (L7) — *deps: —* — game-engine-developer
+- ✅ **E11-10** App-context `@SpringBootTest` smoke test in CI (catch wiring bugs like TileCache) (L7) — *deps: E11-09* — agent-runtime-developer
+
+## E12 — Agent depth & spectacle (from 4-agent live-server sim → `docs/game-design/10-four-agent-live-sim-findings.md`)
+- ✅ **E12-01** Scripted bot multi-tick memory/plans (scout→colonise→fortify) (P7a) — *deps: E11-05* — agent-runtime-developer
+- ☐ **E12-02** Wire faction-config persona/goals/constraints into the live LLM prompt (P7b) — *deps: E7-05, E4-02* — agent-runtime-developer
+- ☐ **E12-03** Opening-diplomacy phase on first contact (treaty/declaration, not silence) (P7c) — *deps: E11-01, E4-06* — agent-runtime-developer
+- ✅ **E12-04** Richer public events (colony founded, first contact, tech unlocked) for feed + overlay (P7d) — *deps: E1-16* — game-engine-developer
+
 ## Cross-cutting (recurring)
-- ▶ **X-01** 🔒 Security review pass (recurring) — pass #1: E4-03/E6-02/E8-06 PASS, E4-04/E6-04 PASS-with-notes (X01-1/X01-2 fixed; X01-3 tracked); pass #2: **E10-06 PASS** (no fog leak in `ALREADY_REVEALED`, pure reveal-tracking) — security-reviewer
-- ▶ **X-02** Balance coherence pass (recurring) — pass #1: 50/50 holds, no dominant strategy, 4 gaps noted; pass #2 (E10-05): home economy floor + economic-victory target reconciled (`08-balance-coherence-notes.md` §8) — game-balance-designer
+- ▶ **X-01** 🔒 Security review pass (recurring) — pass #1: E4-03/E6-02/E8-06 PASS, E4-04/E6-04 PASS-with-notes (X01-1/X01-2 fixed; X01-3 tracked); pass #2: **E10-06 PASS** (no fog leak in `ALREADY_REVEALED`, pure reveal-tracking); pass #3: **E11-04 PASS** (closed `SeatType` whitelist + exhaustive switch, no reflection/arbitrary instantiation, `Locale.ROOT` case-fold, length-check before per-element work, LLM rejected not instantiated; one optional defense-in-depth note: request list-size bound) — security-reviewer
+- ▶ **X-02** Balance coherence pass (recurring) — pass #1: 50/50 holds, no dominant strategy, 4 gaps noted; pass #2 (E10-05): home economy floor + economic-victory target reconciled (`08-balance-coherence-notes.md` §8); pass #3 (E11-03/06): victory thresholds verified reachable on the 8-system generated small map (DOMINATION 0.6 = 5/8, economic 700 within reach), oceanic-biome energy floor (0→1.0) fixes permanent home energy-deficit (`08-balance-coherence-notes.md` §9) — game-balance-designer
 - ▶ **X-03** Spec sync (recurring) — maintained in step this session (rest-api, websocket-protocol, agent-io-schema, balance-config, data-model, procedural-catalog-algorithm, 02-galaxy-scale) — card owner
 
 ## Milestones

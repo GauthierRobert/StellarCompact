@@ -87,6 +87,11 @@ final class VictoryEvaluation {
         // Victory only fires for a live (RUNNING) match.
         if (cfg.conditionEnabled() && next.status() == GameStatus.RUNNING) {
             List<FactionId> winners = evaluateWinners(next, profile, cfg);
+            // The primary condition takes precedence: only fall back to the hard timeout
+            // when it fired no winner this tick (E11-02 board finding L3).
+            if (winners.isEmpty()) {
+                winners = hardTimeout(next, profile, cfg);
+            }
             if (!winners.isEmpty()) {
                 for (FactionId winner : winners) {
                     events.add(new PublicEvent.VictoryAchieved(winner, tick));
@@ -148,6 +153,34 @@ final class VictoryEvaluation {
             case SURVIVAL -> survival(state, profile, cfg);
             case WONDER -> wonder(state, cfg);
         };
+    }
+
+    /**
+     * E11-02 hard timeout-victory (board finding L3). Applies REGARDLESS of the active
+     * primary condition: a match still {@link GameStatus#RUNNING} at the configured
+     * {@code hardTickLimit} with no primary winner is concluded with the leader of the
+     * canonical {@link Scoring} ranking - highest weighted score, faction id breaking any
+     * tie - so a match <em>always</em> ends in a bounded number of ticks. Disabled when
+     * {@code hardTickLimit <= 0} (the inert default). Pure: a function of the snapshot, the
+     * config tick limit and the deterministic ranking; no clock, no randomness.
+     *
+     * @return a single-element list with the ranked leader when the limit is reached and at
+     * least one faction exists; otherwise empty (timeout disabled, not yet reached, or no
+     * factions to crown).
+     */
+    private static List<FactionId> hardTimeout(GameState state, BalanceProfile profile,
+                                               BalanceProfile.Victory cfg) {
+        int limit = cfg.hardTickLimit();
+        if (limit <= 0 || state.tick() < limit) {
+            return List.of();
+        }
+        List<Scoring.FactionScore> ranking = Scoring.rank(state, profile);
+        if (ranking.isEmpty()) {
+            return List.of();
+        }
+        // Scoring.rank is a total order (score desc, faction id asc) so the leader, and thus
+        // the timeout winner, is replay-identical regardless of map iteration order.
+        return List.of(ranking.get(0).faction());
     }
 
     /**

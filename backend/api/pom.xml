@@ -44,9 +44,30 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!--
+          Dev authentication (username-only JWT, see docs/specs/rest-api.md
+          "Authentication (dev)"). resource-server decodes/verifies the Bearer token and
+          populates the request Principal from the `sub` claim; the oauth2-jose Nimbus
+          encoder mints the dev HS256 token. Forward-compatible with Google OAuth: swap the
+          decoder's key source (Google JWKS) and the issuer without touching controllers.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

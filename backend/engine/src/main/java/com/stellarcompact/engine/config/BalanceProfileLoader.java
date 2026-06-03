@@ -160,6 +160,11 @@ public final class BalanceProfileLoader {
         require(w.stages() > 0, "victory.wonder.stages must be > 0");
         require(w.holdTicks() > 0, "victory.wonder.holdTicks must be > 0");
         req(v.scoreWeights(), "victory.scoreWeights");
+        // E11-02 hard timeout-victory. Additive: a profile may omit it (the record defaults
+        // it to 0 = disabled). A negative authored value is meaningless (the record treats
+        // anything <= 0 as disabled); reject it so a typo fails loudly at load rather than
+        // silently disabling the always-ends guarantee.
+        require(v.hardTickLimit() >= 0, "victory.hardTickLimit must be >= 0 (0 disables it)");
 
         // tick
         BalanceProfile.Tick tick = req(p.tick(), "tick");

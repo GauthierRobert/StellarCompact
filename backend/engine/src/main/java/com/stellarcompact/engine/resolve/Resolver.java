@@ -4,10 +4,14 @@ import com.stellarcompact.engine.action.Action;
 import com.stellarcompact.engine.action.UnknownAction;
 import com.stellarcompact.engine.config.BalanceProfile;
 import com.stellarcompact.engine.map.LaneNetwork;
+import com.stellarcompact.engine.state.ActiveSystem;
 import com.stellarcompact.engine.state.Faction;
 import com.stellarcompact.engine.state.FactionId;
 import com.stellarcompact.engine.state.GameState;
+import com.stellarcompact.engine.state.Planet;
+import com.stellarcompact.engine.state.PlanetId;
 import com.stellarcompact.engine.state.ResourceBundle;
+import com.stellarcompact.engine.state.SystemId;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -334,7 +338,7 @@ public final class Resolver {
     private static GameState resolveDevelopment(GameState state, List<SubmittedAction> slice,
                                                 StepContext ctx) {
         GameState afterActions = resolveActionDriven(state, slice, ctx);
-        return DevelopmentResolution.advance(afterActions, ctx.profile());
+        return DevelopmentResolution.advance(afterActions, ctx.profile(), ctx.tick(), ctx.events());
     }
 
     /**
@@ -541,6 +545,21 @@ public final class Resolver {
         if (actor == null) {
             return s; // validator guarantees the actor exists; belt-and-braces.
         }
+        // E12-04 P7d: FIRST CONTACT. If this Explore reveals - for the FIRST time - a
+        // system owned by another faction, the two empires have made first contact. This
+        // is the pure-engine proxy for "their fog overlaps": the moment the discoverer's
+        // known map first reaches a rival's territory. Emitted only on the genuine first
+        // reveal (the explored set is the monotone, replay-stable guard) and only when the
+        // revealed system has a foreign owner, so it fires once per (discoverer, system)
+        // and never on re-Explore (the validator already rejects those as ALREADY_REVEALED).
+        if (!actor.hasExplored(x.targetSystem())) {
+            ActiveSystem revealed = s.systems().get(x.targetSystem());
+            if (revealed != null && revealed.owner().isPresent()
+                    && !revealed.owner().get().equals(a)) {
+                c.events().add(new PublicEvent.FirstContact(
+                        a, revealed.owner().get(), x.targetSystem(), c.tick()));
+            }
+        }
         return s.withFaction(actor.withExplored(x.targetSystem()));
     }
 
@@ -556,7 +575,30 @@ public final class Resolver {
     }
 
     private static GameState stubColonize(GameState s, FactionId a, Action.Colonize x, StepContext c) {
-        return s; // TODO(E1-06): establish colony; escrow biome cost; seeded attrition.
+        // E12-04 P7d: COLONY FOUNDED. The colony's economy (escrow biome cost, seeded
+        // attrition, ownership transfer) is still TODO(E1-06), but a validated Colonize is
+        // already a public, galaxy-wide fact - the validator guarantees the delivering
+        // fleet is stationed at a neutral host the actor reached. Like RouteEstablished,
+        // E12-04 emits the milestone here, derived deterministically from the action
+        // (coloniser = actor, system = the planet's host system). This stays the single
+        // emission site when E1-06 lands the ownership transfer.
+        SystemId host = hostSystemOf(s, x.planet());
+        if (host != null) {
+            c.events().add(new PublicEvent.ColonyFounded(a, host, c.tick()));
+        }
+        return s;
+    }
+
+    /** The id of the system hosting {@code planet}, or {@code null} if no such planet. */
+    private static SystemId hostSystemOf(GameState state, PlanetId planet) {
+        for (ActiveSystem system : state.systems().values()) {
+            for (Planet p : system.planets()) {
+                if (p.id().equals(planet)) {
+                    return system.id();
+                }
+            }
+        }
+        return null;
     }
 
     private static GameState stubProposeTrade(GameState s, FactionId a, Action.ProposeTrade x, StepContext c) {
@@ -601,7 +643,9 @@ public final class Resolver {
      * The EVENTS step (E1-16; game-design 03 step 11 - the final resolution slot). The
      * galaxy-wide public events are <em>recorded</em> by the steps that produced them
      * (diplomacy -&gt; War/Treaty/Alliance; combat -&gt; Battle/SystemCaptured;
-     * interdiction -&gt; RouteRaided; market -&gt; RouteEstablished) into
+     * interdiction -&gt; RouteRaided; development -&gt; FirstContact (Explore) then
+     * TechUnlocked (research completes); colonisation -&gt; ColonyFounded;
+     * market -&gt; RouteEstablished) into
      * {@code ctx.events()} during this same tick, in the fixed step order over each
      * step's already-canonically-ordered slice. By the time this final step runs the
      * collector therefore already holds the tick's events in a deterministic,

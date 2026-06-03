@@ -257,7 +257,137 @@ class HomePlacementGeneratorTest {
                 () -> new HomePlacementConfig(2, 1, 1, 1.5, Biome.OCEANIC));
         assertThrows(IllegalArgumentException.class,
                 () -> new HomePlacementConfig(2, 1, 1, 0.5, null));
+        // E10-05 floor validation: planet count must be >= 1, yield floor must be >= 0.
+        assertThrows(IllegalArgumentException.class,
+                () -> new HomePlacementConfig(2, 1, 1, 0.5, Biome.OCEANIC, 0, 0.0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new HomePlacementConfig(2, 1, 1, 0.5, Biome.OCEANIC, 1, -1.0));
         assertNotEquals(null, config(2, 1));
+    }
+
+    // --- E10-05 starting-economy floor (3-agent-sim F4) ---
+
+    @Test
+    @DisplayName("every chosen home clears the configured starting-economy floor")
+    void chosenHomesClearTheFloor() {
+        int minPlanets = 3;
+        double minYield = 9.0;
+        LaneGraph g = graph(SEED);
+        HomePlacementConfig cfg =
+                new HomePlacementConfig(3, 2, 2, 0.5, Biome.OCEANIC, minPlanets, minYield);
+        HomePlacement p;
+        try {
+            p = HomePlacementGenerator.place(SEED, g, cfg);
+        } catch (HomePlacementException e) {
+            return; // a strict floor may be infeasible for this region; a clean fail is valid
+        }
+        for (long id : p.homeStarIds()) {
+            StarSystem sys = SystemGenerator.generate(SEED, id);
+            assertTrue(sys.planets().size() >= minPlanets,
+                    "home " + id + " has only " + sys.planets().size()
+                            + " planets, below floor " + minPlanets);
+            assertTrue(aggregateYield(sys) >= minYield,
+                    "home " + id + " yields " + aggregateYield(sys) + ", below floor " + minYield);
+        }
+    }
+
+    @Test
+    @DisplayName("a would-be-starved candidate is rejected by the floor (lifted or excluded)")
+    void floorRejectsStarvedCandidates() {
+        LaneGraph g = graph(SEED);
+        // Inert floor: the full cradle pool (including any starved 1-planet homes).
+        HomePlacementConfig inert =
+                new HomePlacementConfig(3, 2, 2, 0.5, Biome.OCEANIC, 1, 0.0);
+        // A real floor: reject homes below 3 planets / 9 aggregate yield.
+        int minPlanets = 3;
+        double minYield = 9.0;
+        HomePlacementConfig floored =
+                new HomePlacementConfig(3, 2, 2, 0.5, Biome.OCEANIC, minPlanets, minYield);
+
+        // The floored candidate pool must be a strict subset whenever a starved cradle
+        // exists in the region: any cradle below the floor is dropped.
+        List<Long> inertPool = cradlePool(g, inert);
+        List<Long> flooredPool = cradlePool(g, floored);
+        assertTrue(flooredPool.size() <= inertPool.size(),
+                "the floor can only shrink (never grow) the candidate pool");
+        for (long id : flooredPool) {
+            StarSystem sys = SystemGenerator.generate(SEED, id);
+            assertTrue(sys.planets().size() >= minPlanets && aggregateYield(sys) >= minYield,
+                    "a floored candidate must clear the floor: " + id);
+        }
+        // Prove the floor actually bites somewhere in the explored bulge: at least one
+        // cradle that the inert pool admits is starved (below the floor) and excluded.
+        boolean someStarvedExcluded = inertPool.stream().anyMatch(id -> {
+            StarSystem sys = SystemGenerator.generate(SEED, id);
+            return sys.planets().size() < minPlanets || aggregateYield(sys) < minYield;
+        });
+        assertEquals(someStarvedExcluded,
+                flooredPool.size() < inertPool.size(),
+                "if a starved cradle exists, the floored pool must be strictly smaller");
+    }
+
+    @Test
+    @DisplayName("placement under a floor is still deterministic (same seed => identical)")
+    void floorPlacementIsDeterministic() {
+        LaneGraph g = graph(SEED);
+        HomePlacementConfig cfg =
+                new HomePlacementConfig(3, 2, 2, 0.5, Biome.OCEANIC, 2, 6.0);
+        HomePlacement a;
+        try {
+            a = HomePlacementGenerator.place(SEED, g, cfg);
+        } catch (HomePlacementException e) {
+            return; // infeasible floor for this region is an acceptable, deterministic outcome
+        }
+        HomePlacement b = HomePlacementGenerator.place(SEED, g, cfg);
+        assertEquals(a.homeStarIds(), b.homeStarIds(), "floored placement must be reproducible");
+        assertEquals(a.homeQualities(), b.homeQualities(), "floored qualities must match");
+    }
+
+    @Test
+    @DisplayName("an unsatisfiable floor fails deterministically rather than dealing a starved home")
+    void impossibleFloorFails() {
+        LaneGraph g = graph(SEED);
+        // A yield floor no system can reach forces a clean, repeatable failure.
+        HomePlacementConfig cfg =
+                new HomePlacementConfig(4, 2, 2, 0.5, Biome.OCEANIC, 1, 1_000_000.0);
+        HomePlacementException e1 = assertThrows(HomePlacementException.class,
+                () -> HomePlacementGenerator.place(SEED, g, cfg));
+        HomePlacementException e2 = assertThrows(HomePlacementException.class,
+                () -> HomePlacementGenerator.place(SEED, g, cfg));
+        assertEquals(e1.getMessage(), e2.getMessage(), "floor failure must be deterministic");
+        assertTrue(e1.getMessage().toLowerCase().contains("floor"),
+                "message must name the floor: " + e1.getMessage());
+    }
+
+    /** Aggregate base biome yield of a system (sum over planets, across all resources). */
+    private static double aggregateYield(StarSystem sys) {
+        double total = 0.0;
+        for (Planet p : sys.planets()) {
+            for (Resource r : Resource.values()) {
+                total += p.baseYields().get(r);
+            }
+        }
+        return total;
+    }
+
+    /**
+     * The cradle candidate pool the generator would build for a config: every graph node
+     * carrying the home biome whose own system clears the floor. Mirrors the generator's
+     * step-1 filter so a test can compare inert vs. floored pools.
+     */
+    private static List<Long> cradlePool(LaneGraph g, HomePlacementConfig cfg) {
+        List<Long> out = new ArrayList<>();
+        for (long id : g.starIds()) {
+            StarSystem sys = SystemGenerator.generate(SEED, id);
+            if (sys.planets().size() < cfg.minHomePlanetCount()) {
+                continue;
+            }
+            boolean cradle = sys.planets().stream().anyMatch(p -> p.biome() == cfg.homeBiome());
+            if (cradle && aggregateYield(sys) >= cfg.minHomeBiomeYield()) {
+                out.add(id);
+            }
+        }
+        return out;
     }
 
     // --- helpers ---

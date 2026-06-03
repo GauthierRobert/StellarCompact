@@ -239,7 +239,9 @@
     "minSeparationHops": 5,
     "neighbourhoodHops": 3,
     "qualityToleranceFraction": 0.30,
-    "homeBiome": "oceanic"
+    "homeBiome": "oceanic",
+    "minHomePlanetCount": 3,
+    "minHomeBiomeYield": 9.0
   },
   "espionage": {
     "successBase": {

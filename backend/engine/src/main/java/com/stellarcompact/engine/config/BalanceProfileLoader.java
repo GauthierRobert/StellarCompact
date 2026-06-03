@@ -196,6 +196,24 @@ public final class BalanceProfileLoader {
         require(prob(prog.reputationCarryWeight()),
                 "progression.reputationCarryWeight must be in [0,1]");
         req(prog.starterStockpile(), "progression.starterStockpile");
+
+        // home placement (E2-04 + E10-05 starting-economy floor). Additive: a profile may
+        // omit the block (the record supplies inert defaults). The record already floors
+        // the cardinality fields and the E10-05 knobs; these asserts make a malformed
+        // authored value fail loudly at load (rule 7: a bad config dies at load, not
+        // mid-tick). Faction count / separation / neighbourhood are validated by the
+        // galaxy mirror's constructor at placement time; here we guard the load-time range
+        // of the new fairness floor and the tolerance fraction.
+        BalanceProfile.HomePlacement hp = req(p.homePlacement(), "homePlacement");
+        require(hp.factionCount() >= 1, "homePlacement.factionCount must be >= 1");
+        require(hp.minSeparationHops() >= 1, "homePlacement.minSeparationHops must be >= 1");
+        require(hp.neighbourhoodHops() >= 0, "homePlacement.neighbourhoodHops must be >= 0");
+        require(prob(hp.qualityToleranceFraction()),
+                "homePlacement.qualityToleranceFraction must be in [0,1]");
+        require(hp.homeBiome() != null && !hp.homeBiome().isBlank(),
+                "homePlacement.homeBiome must be set");
+        require(hp.minHomePlanetCount() >= 1, "homePlacement.minHomePlanetCount must be >= 1");
+        require(hp.minHomeBiomeYield() >= 0.0, "homePlacement.minHomeBiomeYield must be >= 0");
     }
 
     private static boolean prob(double x) {

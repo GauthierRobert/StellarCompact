@@ -29,8 +29,18 @@ import java.util.Map;
  * <ol>
  *   <li><strong>Candidates.</strong> A star is a home candidate iff its own system
  *       carries at least one {@link HomePlacementConfig#homeBiome()} planet - the
- *       cradle world the faction is seeded onto. Stars without a cradle are never
- *       homes (so the starting roster guarantee is structural, not luck).</li>
+ *       cradle world the faction is seeded onto - AND clears the E10-05
+ *       <em>starting-economy floor</em>: its own system carries at least
+ *       {@link HomePlacementConfig#minHomePlanetCount()} planets and its aggregate base
+ *       biome yield (summed over its planets, across all {@link Resource}s) is at least
+ *       {@link HomePlacementConfig#minHomeBiomeYield()}. Stars without a cradle, or below
+ *       the floor, are never homes. The floor (3-agent-sim F4) bounds the <em>absolute</em>
+ *       economic strength of a home so a starved 1-planet home can never be dealt;
+ *       {@code qualityToleranceFraction} below still bounds the <em>relative</em> spread
+ *       across the chosen homes. Both are inert at their defaults
+ *       ({@code minHomePlanetCount = 1}, {@code minHomeBiomeYield = 0}), so a profile that
+ *       omits the floor selects exactly as before (so the starting roster guarantee is
+ *       structural, not luck).</li>
  *   <li><strong>Neighbourhood quality.</strong> Each candidate is scored by a BFS out
  *       to {@link HomePlacementConfig#neighbourhoodHops()} lane hops, summing every
  *       reachable system's {@link #systemQuality} (colonisable build capacity +
@@ -79,12 +89,16 @@ public final class HomePlacementGenerator {
      *                                separated+balanced set exists)
      */
     public static HomePlacement place(long gameSeed, LaneGraph graph, HomePlacementConfig config) {
-        // 1. Candidates: stars whose own system carries at least one cradle (homeBiome).
-        //    Walk the graph nodes in the graph's own deterministic order, then sort by
-        //    id so the candidate set order cannot depend on adjacency insertion order.
+        // 1. Candidates: stars whose own system carries at least one cradle (homeBiome)
+        //    AND clear the E10-05 starting-economy floor (>= minHomePlanetCount planets
+        //    and >= minHomeBiomeYield aggregate base yield). Walk the graph nodes in the
+        //    graph's own deterministic order, then sort by id so the candidate set order
+        //    cannot depend on adjacency insertion order. The floor is applied here, before
+        //    quality scoring, so a starved home is filtered out of the pool entirely - it
+        //    can be neither the band anchor nor a band member.
         List<Long> candidateIds = new ArrayList<>();
         for (long starId : graph.starIds()) {
-            if (hasHomeBiome(gameSeed, starId, config.homeBiome())) {
+            if (isHomeCandidate(gameSeed, starId, config)) {
                 candidateIds.add(starId);
             }
         }
@@ -92,10 +106,12 @@ public final class HomePlacementGenerator {
 
         if (candidateIds.size() < config.factionCount()) {
             throw new HomePlacementException(
-                    "not enough " + config.homeBiome() + " home candidates: found "
-                            + candidateIds.size() + " but need " + config.factionCount()
-                            + " (one cradle per faction). Generate a larger region or "
-                            + "lower the faction count.");
+                    "not enough " + config.homeBiome() + " home candidates clearing the "
+                            + "starting-economy floor (>= " + config.minHomePlanetCount()
+                            + " planets, >= " + config.minHomeBiomeYield() + " aggregate base "
+                            + "yield): found " + candidateIds.size() + " but need "
+                            + config.factionCount() + " (one cradle per faction). Generate a "
+                            + "larger region, relax the floor, or lower the faction count.");
         }
 
         // 2. Neighbourhood quality per candidate (BFS to K hops).
@@ -269,15 +285,43 @@ public final class HomePlacementGenerator {
 
     // --- hop distance --------------------------------------------------------
 
-    /** True iff the candidate system carries at least one cradle (homeBiome) planet. */
-    private static boolean hasHomeBiome(long gameSeed, long systemId, Biome homeBiome) {
+    /**
+     * True iff the system is a viable home: it carries at least one cradle
+     * ({@link HomePlacementConfig#homeBiome()}) planet AND clears the E10-05
+     * starting-economy floor - its own system carries at least
+     * {@link HomePlacementConfig#minHomePlanetCount()} planets and its aggregate base
+     * biome yield is at least {@link HomePlacementConfig#minHomeBiomeYield()}. Pure
+     * function of {@code (gameSeed, systemId)} via {@link SystemGenerator}, so the
+     * candidate set is deterministic. The floor is evaluated on a SINGLE regenerated
+     * roster (one {@link SystemGenerator#generate} call) for the planet-count, cradle
+     * and yield checks together.
+     */
+    private static boolean isHomeCandidate(long gameSeed, long systemId,
+                                           HomePlacementConfig config) {
         StarSystem sys = SystemGenerator.generate(gameSeed, systemId);
-        for (Planet p : sys.planets()) {
-            if (p.biome() == homeBiome) {
-                return true;
+        List<Planet> planets = sys.planets();
+        // Starting-economy floor: minimum planet count (F4 - reject the 1-planet home).
+        if (planets.size() < config.minHomePlanetCount()) {
+            return false;
+        }
+        boolean hasCradle = false;
+        double aggregateYield = 0.0;
+        for (Planet p : planets) {
+            if (p.biome() == config.homeBiome()) {
+                hasCradle = true;
+            }
+            ResourceYield y = p.baseYields();
+            for (Resource r : Resource.values()) {
+                aggregateYield += y.get(r);
             }
         }
-        return false;
+        // Must carry the cradle the faction is seeded onto.
+        if (!hasCradle) {
+            return false;
+        }
+        // Starting-economy floor: minimum aggregate base biome yield (F4 - reject a
+        // multi-planet but near-barren home, e.g. toxic rubble around the cradle).
+        return aggregateYield >= config.minHomeBiomeYield();
     }
 
     /**

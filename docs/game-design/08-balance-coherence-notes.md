@@ -287,3 +287,83 @@ determinism baseline (items 4–5). The profiles are coherent as shipped.
 - [ ] Re-confirm no new resolver introduced a hardcoded constant (rule 6).
 - [ ] Re-run the `A/d` influence-ceiling check if any `influence.*`, `decayRate`, or
       `economic.influenceTarget` changed.
+- [ ] Re-confirm the E10-05 starting-economy floor (§8) still leaves the bulge region able
+      to seat `factionCount` homes after any change to biome weights, planet sizing, or
+      `homePlacement.*`.
+
+---
+
+## 8. E10-05 — Fairness floor (F4) + economic-victory reconciliation (F6)
+
+Applied in card E10-05 (config + galaxy generator + spec), closing the two fairness/
+reachability findings of `docs/game-design/09-three-agent-sim-findings.md`. Unlike the
+NONE-applied passes above, this pass **does** change shipped numbers — but only additive,
+fairness-restoring ones (the home-placement floor is inert by default; the small-default
+economic retune lowers an unreachable target to a documented one). The galaxy home
+placement is procedural and is **not** part of the engine's golden tick-hash baseline, so
+the floor does not perturb the determinism fixtures.
+
+### 8.1 F4 — Starting-economy floor on home placement
+
+**Finding.** The sim dealt one faction a 1-planet home and another a 7-planet home — a 7×
+economic gap from the seed alone. `HomePlacementGenerator` guarded only the *relative*
+spread (`qualityToleranceFraction = 0.35`, homes within 35% neighbourhood quality); it had
+no *absolute* floor, so an entire band of low-but-similar-quality homes could be dealt, and
+the scenario that bypassed the generator showed how decisive a starved home is.
+
+**Design.** Two new, config-driven, deterministic floors are layered on the candidate set
+*before* quality scoring (so a starved home is neither a band anchor nor a band member):
+
+- `homePlacement.minHomePlanetCount` — the home system's own planet count must be ≥ this.
+  Directly kills the F4 1-planet home. Set **2** (small-default) / **3** (large-persistent).
+- `homePlacement.minHomeBiomeYield` — the home system's *aggregate base biome yield* (sum
+  over its planets of base yields across all four physical resources) must be ≥ this. Catches
+  the multi-planet-but-near-barren home (e.g. an oceanic cradle ringed by toxic rubble that
+  yields almost nothing). Set **6.0** (small-default) / **9.0** (large-persistent).
+
+**Why these numbers.** An oceanic cradle alone yields FOOD 3 (procedural baseline). A 2-planet
+small-default home clearing `minHomeBiomeYield = 6.0` must carry the cradle *plus* a second
+body contributing ≥ 3 more yield — i.e. a genuinely workable starting economy, not a lone
+food world. Large-persistent is a bigger region with far more cradle candidates, so it can
+afford a stricter 3-planet / 9.0-yield floor without starving the 8-home draw. Both floors
+are **inert at their defaults** (`minHomePlanetCount = 1`, `minHomeBiomeYield = 0.0`): a
+profile that omits them, and the pre-E10-05 5-arg `HomePlacementConfig`/`HomePlacement`
+constructors, select exactly as before. The relative guard (`qualityToleranceFraction`) is
+unchanged and still applies to the survivors — the floor bounds the *absolute* floor, the
+tolerance bounds the *spread*. Both work together; neither replaces the other.
+
+**Coherence check.** The floor can only *shrink* the candidate pool, so it cannot relax
+separation or tolerance. If too few cradles clear the floor to seat `factionCount` separated,
+balanced homes, placement **fails deterministically** (same clear, repeatable message) rather
+than dealing a starved start — the same "fail, don't cram" contract E2-04 already honoured,
+now extended to "fail, don't starve". Determinism is preserved: every floor check is a pure
+function of `(gameSeed, systemId)` via `SystemGenerator`.
+
+### 8.2 F6 — Economic-victory target reconciled to a documented build
+
+**Finding.** `economic.influenceTarget = 1000` (small-default) against a single-capital
+asymptote of `perCapitalSystem / decayRate = 1.0 / 0.02 = 50` — ~20× out of reach for a
+do-nothing 1-capital faction; the sim saw all three converge to ~49.
+
+**Decision: retune small-default to a documented build's ceiling (option a), keep large
+ambitious-but-documented (option b).** Using the `A/d` ceiling identity from §4:
+
+- **small-default `influenceTarget`: 1000 → 700.** Documented reachable path: a committed
+  prestige faction with ~5 owned systems (`5×1.0`), 2 active Monuments (`2×3.0`), ~6 units of
+  owned active-route trade volume (`6×0.5`) and ~2 active treaties (`2×0.5`) accrues
+  `A ≈ 15/tick`, ceiling `15/0.02 = 750 ≥ 700`. A 1-capital faction (ceiling 50) still cannot
+  reach it — ECONOMIC stays the *specialist/expansion* win, not the idle baseline — but a
+  competent expansion+monument+trade agent now has a target it can actually walk. small-default's
+  *active* condition is DOMINATION, so 700 is the informational/alternative line; the retune
+  makes it internally coherent rather than decorative.
+- **large-persistent `influenceTarget`: 10000 (unchanged).** With `decayRate = 0.01` the ceiling
+  is `100×A`; 10000 needs sustained `A ≈ 100/tick` — a deep late empire (~20+ systems, several
+  Monuments at `perMonument 4.0`, a broad trade web). Deliberately a long-campaign prestige win;
+  the *active* condition is SURVIVAL, so 10000 is again the alternative path. Left unchanged to
+  avoid perturbing the large-profile baseline and because it is already documented-reachable.
+
+**Net effect on the 50/50 balance.** Neither change advantages force over diplomacy: the floor
+makes *every* faction's economic start fairer (helping the diplomacy/economy pillars that a
+starved faction could never pursue), and the F6 retune makes the prestige/economic win line
+honest without making it a sprint. Force still pays its built-in costs (variance, attrition,
+occupation unrest, reputation) documented in §2.

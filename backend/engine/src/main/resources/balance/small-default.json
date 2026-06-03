@@ -210,7 +210,7 @@
     "conditionEnabled": true,
     "eliminationEnabled": true,
     "domination": { "systemPct": 0.6 },
-    "economic": { "influenceTarget": 1000.0, "orTopForTicks": 40 },
+    "economic": { "influenceTarget": 700.0, "orTopForTicks": 40 },
     "diplomatic": { "allianceMajorityPct": 0.6 },
     "survival": { "tickLimit": 300 },
     "wonder": { "stages": 3, "holdTicks": 30 },
@@ -234,7 +234,9 @@
     "minSeparationHops": 3,
     "neighbourhoodHops": 2,
     "qualityToleranceFraction": 0.35,
-    "homeBiome": "oceanic"
+    "homeBiome": "oceanic",
+    "minHomePlanetCount": 2,
+    "minHomeBiomeYield": 6.0
   },
   "espionage": {
     "successBase": {

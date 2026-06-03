@@ -708,23 +708,71 @@ public record BalanceProfile(
      *   <li>{@code homeBiome} - the cradle biome a home system must carry (the
      *       colonised home world the faction starts on); a
      *       {@link com.stellarcompact.engine.state.Biome#configKey()} value.</li>
+     *   <li>{@code minHomePlanetCount} - E10-05 starting-economy floor (3-agent-sim F4:
+     *       the sim dealt a 1-planet home against a 7-planet home, a 7x economic gap from
+     *       the seed alone). A cradle candidate whose own system carries fewer than this
+     *       many planets is rejected, so a starved 1-planet home can never be dealt.
+     *       Layered ON TOP of the cradle + {@code qualityToleranceFraction} guards (a
+     *       survivor still must fall in the fairness band). {@code >= 1}; {@code 1} is
+     *       inert (no floor).</li>
+     *   <li>{@code minHomeBiomeYield} - E10-05 starting-economy floor (F4): a cradle
+     *       candidate whose own system's aggregate base biome yield (summed over its
+     *       planets, across all four physical resources) is below this is rejected, so a
+     *       home that is multi-planet but near-barren (e.g. toxic rubble) is also
+     *       excluded. {@code >= 0}; {@code 0} is inert (no floor).</li>
      * </ul>
+     *
+     * <p>The floor bounds the <em>absolute</em> economic strength of a home;
+     * {@code qualityToleranceFraction} bounds the <em>relative</em> spread across the
+     * chosen homes. Both are mirrored into the galaxy's {@code HomePlacementConfig} and
+     * applied in {@code HomePlacementGenerator}; both default inert so a profile that omits
+     * them places exactly as the pre-E10-05 funnel did.
      */
     public record HomePlacement(
             int factionCount,
             int minSeparationHops,
             int neighbourhoodHops,
             double qualityToleranceFraction,
-            String homeBiome
+            String homeBiome,
+            // --- E10-05 starting-economy floor (append-only; inert at 1 / 0.0) ---
+            int minHomePlanetCount,
+            double minHomeBiomeYield
     ) {
+        /**
+         * Compact constructor flooring the E10-05 starting-economy knobs into range so a
+         * malformed profile cannot demand fewer than one home planet or a negative yield
+         * floor. Both are additive; a pre-E10-05 profile that omits them parses to the
+         * inert floor ({@code minHomePlanetCount = 1}, {@code minHomeBiomeYield = 0.0})
+         * via the backwards-compatible constructor below and stays loadable.
+         */
+        public HomePlacement {
+            if (minHomePlanetCount < 1) {
+                minHomePlanetCount = 1;
+            }
+            if (minHomeBiomeYield < 0.0) {
+                minHomeBiomeYield = 0.0;
+            }
+        }
+
+        /**
+         * Backwards-compatible five-arg constructor predating the E10-05 starting-economy
+         * floor: delegates with the inert floor. Lets pre-E10-05 fixtures that build a
+         * HomePlacement positionally (through {@code homeBiome}) keep compiling unchanged.
+         */
+        public HomePlacement(int factionCount, int minSeparationHops, int neighbourhoodHops,
+                             double qualityToleranceFraction, String homeBiome) {
+            this(factionCount, minSeparationHops, neighbourhoodHops, qualityToleranceFraction,
+                    homeBiome, 1, 0.0);
+        }
+
         /**
          * Inert defaults for a profile that omits the E2-04 block: a single faction,
          * one-hop separation, a one-hop neighbourhood, a generous half tolerance, on the
-         * Oceanic cradle. Inert in the sense that it always loads; a real match supplies
-         * the profile's own values.
+         * Oceanic cradle, with the E10-05 floor inert (1 planet / 0 yield). Inert in the
+         * sense that it always loads; a real match supplies the profile's own values.
          */
         public static HomePlacement defaults() {
-            return new HomePlacement(1, 1, 1, 0.5, "oceanic");
+            return new HomePlacement(1, 1, 1, 0.5, "oceanic", 1, 0.0);
         }
     }
 

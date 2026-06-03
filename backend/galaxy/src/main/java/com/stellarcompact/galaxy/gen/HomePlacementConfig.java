@@ -36,13 +36,32 @@ package com.stellarcompact.galaxy.gen;
  * @param homeBiome                the cradle {@link Biome} a candidate home system
  *                                 must contain at least one of (the colonised home
  *                                 world the faction starts on); never {@code null}
+ * @param minHomePlanetCount       the E10-05 starting-economy floor on the home
+ *                                 system's own planet count (3-agent-sim F4: the sim
+ *                                 dealt a 1-planet home against a 7-planet home, a 7x
+ *                                 economic gap from the seed alone). A cradle candidate
+ *                                 whose own system carries fewer than this many planets
+ *                                 is rejected, so a starved 1-planet home can never be
+ *                                 dealt. Layered ON TOP of the cradle + tolerance guards
+ *                                 (a survivor still has to fall in the fairness band).
+ *                                 Must be {@code >= 1}; {@code 1} is inert (no floor)
+ * @param minHomeBiomeYield        the E10-05 starting-economy floor on the home
+ *                                 system's aggregate base biome yield (F4): the sum,
+ *                                 over every planet in the candidate's own system, of
+ *                                 that planet's {@link Planet#baseYields()} across all
+ *                                 four {@link Resource}s. A candidate below this is
+ *                                 rejected so a home that is multi-planet but near-barren
+ *                                 (e.g. toxic rubble) is also excluded. Must be
+ *                                 {@code >= 0}; {@code 0} is inert (no floor)
  */
 public record HomePlacementConfig(
         int factionCount,
         int minSeparationHops,
         int neighbourhoodHops,
         double qualityToleranceFraction,
-        Biome homeBiome
+        Biome homeBiome,
+        int minHomePlanetCount,
+        double minHomeBiomeYield
 ) {
 
     public HomePlacementConfig {
@@ -64,5 +83,31 @@ public record HomePlacementConfig(
         if (homeBiome == null) {
             throw new IllegalArgumentException("homeBiome must not be null");
         }
+        if (minHomePlanetCount < 1) {
+            throw new IllegalArgumentException(
+                    "minHomePlanetCount must be >= 1: " + minHomePlanetCount);
+        }
+        if (minHomeBiomeYield < 0.0) {
+            throw new IllegalArgumentException(
+                    "minHomeBiomeYield must be >= 0: " + minHomeBiomeYield);
+        }
+    }
+
+    /**
+     * Backwards-compatible five-arg constructor predating the E10-05 starting-economy
+     * floor: delegates with the inert floor ({@code minHomePlanetCount = 1} = any cradle
+     * passes the planet-count gate, {@code minHomeBiomeYield = 0.0} = no yield gate). Lets
+     * pre-E10-05 callers and fixtures that build a config positionally (through
+     * {@code homeBiome}) keep compiling unchanged, and keeps placement byte-identical
+     * for them.
+     */
+    public HomePlacementConfig(
+            int factionCount,
+            int minSeparationHops,
+            int neighbourhoodHops,
+            double qualityToleranceFraction,
+            Biome homeBiome) {
+        this(factionCount, minSeparationHops, neighbourhoodHops, qualityToleranceFraction,
+                homeBiome, 1, 0.0);
     }
 }

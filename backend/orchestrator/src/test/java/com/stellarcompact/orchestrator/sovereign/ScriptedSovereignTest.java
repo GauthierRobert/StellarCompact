@@ -84,16 +84,58 @@ class ScriptedSovereignTest {
     }
 
     @Test
-    void poorFactionDoesNotBuildAndFallsThroughTheLadder() {
-        // Below the Minerals floor: the build step is skipped. With an idle fleet and
-        // a neutral neighbour, the bot explores instead.
-        GameState state = SovereignFixtures.poorWithIdleFleetAndNeutralNeighbour();
+    void doesNotReExploreAnAlreadyRevealedNeighbourAndHolds() {
+        // E10-01 (a): below the Minerals floor (build skipped); the only neutral
+        // neighbour is already revealed and the fleet is parked at an OWN system (not
+        // colonisable). The old ladder Explored the revealed neutral here every tick
+        // (finding F1); the bot must now NOT Explore it and Hold instead.
+        GameState state = SovereignFixtures.poorWithRevealedNeutralNeighbour();
         ScriptedSovereign bot = new ScriptedSovereign(ALPHA);
 
         AgentResponse response = bot.decide(WorldViewProjection.project(state, ALPHA));
 
         assertEquals(1, response.actions().size());
-        assertInstanceOf(Action.Explore.class, response.actions().get(0));
+        assertFalse(response.actions().get(0) instanceof Action.Explore,
+                "must not re-Explore an already-revealed neighbour");
+        assertInstanceOf(Action.Hold.class, response.actions().get(0),
+                "with nothing buildable/colonisable/explorable the bot holds explicitly");
+    }
+
+    @Test
+    void colonisesAReachableNeutralWhenTheFrontierIsExhausted() {
+        // E10-01 (b): poor (build skipped), the frontier is exhausted (the only neutral
+        // is revealed) but the bot has an idle fleet parked AT that neutral, which
+        // carries planets -> it colonises the lowest-id planet via the fleet.
+        GameState state = SovereignFixtures.idleFleetParkedAtColonisableNeutral();
+        ScriptedSovereign bot = new ScriptedSovereign(ALPHA);
+
+        AgentResponse response = bot.decide(WorldViewProjection.project(state, ALPHA));
+
+        assertEquals(1, response.actions().size());
+        Action action = response.actions().get(0);
+        assertInstanceOf(Action.Colonize.class, action);
+        Action.Colonize colonize = (Action.Colonize) action;
+        assertEquals(SovereignFixtures.PLANET_N1, colonize.planet(),
+                "colonises the lowest-id planet of the neutral");
+        assertEquals(SovereignFixtures.FLEET_A, colonize.viaFleet(),
+                "delivers the colony with the fleet parked at the neutral");
+        // And the engine validator accepts it.
+        ValidationResult result = ActionValidator.validate(
+                state, ALPHA, action, SovereignFixtures.profile());
+        assertTrue(result.isValid(), "the emitted Colonize must validate: " + result);
+    }
+
+    @Test
+    void holdsWhenNeitherBuildColoniseNorExploreApplies() {
+        // E10-01 (c): no free slot, no fleet, no neutral neighbour -> explicit Hold,
+        // never a redundant Explore.
+        GameState state = SovereignFixtures.idleState();
+        ScriptedSovereign bot = new ScriptedSovereign(ALPHA);
+
+        AgentResponse response = bot.decide(WorldViewProjection.project(state, ALPHA));
+
+        assertEquals(1, response.actions().size());
+        assertInstanceOf(Action.Hold.class, response.actions().get(0));
     }
 
     @Test

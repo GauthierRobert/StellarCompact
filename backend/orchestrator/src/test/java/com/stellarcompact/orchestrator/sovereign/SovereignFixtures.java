@@ -49,6 +49,8 @@ final class SovereignFixtures {
     static final SystemId SYS_NEUTRAL = new SystemId("sysN");
     static final PlanetId PLANET_A = new PlanetId("planetA");
     static final PlanetId PLANET_B = new PlanetId("planetB");
+    static final PlanetId PLANET_N1 = new PlanetId("planetN1");
+    static final PlanetId PLANET_N2 = new PlanetId("planetN2");
     static final FleetId FLEET_A = new FleetId("fleetA");
 
     // --- Fog-of-war scenario ids (E3-02) ----------------------------------------
@@ -108,6 +110,12 @@ final class SovereignFixtures {
                 Optional.empty(), List.of(), 0, 1.0);
     }
 
+    /** A neutral (unowned) system carrying a colonisable planet roster. */
+    static ActiveSystem neutralSystemWithPlanets(SystemId id, List<Planet> planets) {
+        return new ActiveSystem(id, "name-" + id.value(), new Coords(1, 1),
+                Optional.empty(), planets, 0, 1.0);
+    }
+
     static Fleet fleetAt(FleetId id, FactionId owner, SystemId at) {
         return new Fleet(id, owner, Optional.of(at), Optional.empty(),
                 FleetStance.DEFENSIVE, List.of(new Ship("scout", 1)));
@@ -142,8 +150,13 @@ final class SovereignFixtures {
                 Map.of());
     }
 
-    /** ALPHA poor (below build floor), idle fleet, and a neutral neighbour -> Explore. */
-    static GameState poorWithIdleFleetAndNeutralNeighbour() {
+    /**
+     * ALPHA poor (below build floor), idle fleet parked at its OWN system, and a
+     * neutral neighbour it has merely revealed (no fleet there). Post-E10-01 the bot
+     * neither builds (poor), colonises (no fleet at the neutral) nor explores (the
+     * neutral is already revealed/explored) -> explicit Hold.
+     */
+    static GameState poorWithRevealedNeutralNeighbour() {
         return build(
                 Map.of(ALPHA, faction(ALPHA, poor())),
                 Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3))),
@@ -151,12 +164,28 @@ final class SovereignFixtures {
                 Map.of(FLEET_A, fleetAt(FLEET_A, ALPHA, SYS_A)));
     }
 
+    /**
+     * ALPHA poor (so the build step is skipped) with an idle fleet PARKED AT a neutral
+     * system that carries two planets. The frontier is exhausted (the neutral is
+     * already revealed) but it is reachable, so the bot colonises the lowest-id planet
+     * of that neutral via the fleet (E10-01).
+     */
+    static GameState idleFleetParkedAtColonisableNeutral() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, poor())),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3))),
+                        SYS_NEUTRAL, neutralSystemWithPlanets(SYS_NEUTRAL,
+                                List.of(emptyPlanet(PLANET_N2, 2), emptyPlanet(PLANET_N1, 2)))),
+                Map.of(FLEET_A, fleetAt(FLEET_A, ALPHA, SYS_NEUTRAL)));
+    }
+
     /** A spread of distinct states to prove the bot never throws on varied input. */
     static List<GameState> assortedStates() {
         return List.of(
                 richTwoFactionState(),
                 idleState(),
-                poorWithIdleFleetAndNeutralNeighbour());
+                poorWithRevealedNeutralNeighbour(),
+                idleFleetParkedAtColonisableNeutral());
     }
 
     // === Fog-of-war scenario (E3-02) ============================================

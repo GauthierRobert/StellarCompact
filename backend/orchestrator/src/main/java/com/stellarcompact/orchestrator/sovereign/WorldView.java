@@ -165,12 +165,34 @@ public record WorldView(
      * A fog-limited view of a neighbouring system: ownership only (present iff the
      * system has been revealed to this faction), a rough strength bucket, and the
      * tick it was last seen. No hidden enemy state.
+     *
+     * <p><b>E10-01 — frontier vs revealed, and colonisable detail.</b> Two additive,
+     * fog-safe fields let a Sovereign stop re-Exploring an already-known system and
+     * start colonising reachable neutrals:
+     * <ul>
+     *   <li>{@code explored} — true iff this neighbour is already <em>revealed/known</em>
+     *       to the actor (its ownership/onward lanes are in hand), so re-Exploring it
+     *       would be a redundant no-op. Under the current fog model every neighbour the
+     *       builder emits is sensor-revealed, hence {@code explored == true}; the field
+     *       exists so the Explore heuristic is explicit and stays correct if a later
+     *       card surfaces genuinely-unexplored frontier ids (then {@code false}).</li>
+     *   <li>{@code colonisablePlanets} / {@code reachableViaFleet} — non-empty only for a
+     *       <em>neutral</em> system the actor has an <b>idle fleet parked at</b>: the ids
+     *       of that system's planets (so a {@code Colonize} can name one) and the id of
+     *       the delivering fleet. This leaks only planet <em>ids</em> of a neutral the
+     *       actor has physically reached — never owned/enemy planet rosters, economy or
+     *       garrison — so fog-of-war stays intact. Empty list / empty fleet when the
+     *       actor has no idle fleet present (then the neutral is not colonisable yet).</li>
+     * </ul>
      */
     public record NeighbourView(
             SystemId systemId,
             Optional<FactionId> owner,
             int roughStrength,
-            long lastSeenTick
+            long lastSeenTick,
+            boolean explored,
+            List<PlanetId> colonisablePlanets,
+            Optional<FleetId> reachableViaFleet
     ) {
         public NeighbourView {
             if (systemId == null) {
@@ -179,11 +201,35 @@ public record WorldView(
             if (owner == null) {
                 throw new IllegalArgumentException("NeighbourView.owner must be set (use Optional.empty())");
             }
+            colonisablePlanets = colonisablePlanets == null ? List.of() : List.copyOf(colonisablePlanets);
+            if (reachableViaFleet == null) {
+                throw new IllegalArgumentException(
+                        "NeighbourView.reachableViaFleet must be set (use Optional.empty())");
+            }
+        }
+
+        /**
+         * Backwards-compatible constructor predating the E10-01 frontier/colonise fields:
+         * a revealed neighbour ({@code explored == true}) with no colonisable detail.
+         * Keeps pre-E10-01 positional callers/fixtures compiling (mirrors the additive
+         * pattern used on {@code Faction.revealedIntel}).
+         */
+        public NeighbourView(SystemId systemId, Optional<FactionId> owner, int roughStrength,
+                             long lastSeenTick) {
+            this(systemId, owner, roughStrength, lastSeenTick, true, List.of(), Optional.empty());
         }
 
         /** @return true iff this neighbour is currently unowned (neutral). */
         public boolean isNeutral() {
             return owner.isEmpty();
+        }
+
+        /**
+         * @return true iff this neutral neighbour can be colonised now: the actor has an
+         * idle fleet parked at it and it exposes at least one nameable planet id.
+         */
+        public boolean isColonisable() {
+            return isNeutral() && reachableViaFleet.isPresent() && !colonisablePlanets.isEmpty();
         }
     }
 

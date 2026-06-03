@@ -153,7 +153,7 @@ WorldView
   self               : SelfView { id, name, reputation, stockpiles{energy,minerals,food,tech,influence}, techKnown[] }
   ownSystems[]       : SystemView { id, name, owned:true, ownedPlanets[]{ id, slotsTotal, freeSlots, hasShipyard }, hasShipyard }
   ownFleets[]        : FleetView  { id, location?, enRoute:boolean, stance, totalShips }
-  neighbours[]       : NeighbourView { systemId, owner? (fog: ownership only, present iff revealed), roughStrength, lastSeenTick }
+  neighbours[]       : NeighbourView { systemId, owner? (fog: ownership only, present iff revealed), roughStrength, lastSeenTick, explored:boolean, colonisablePlanets[]:planetId, reachableViaFleet?:fleetId }
   treaties[]         : TreatyView { id, type, parties[], status }
   reputations[]      : RepEntry  { factionId, reputation }          // public ledger
   pendingOffers[]    : OfferView { id, from, expiresTick }          // offers addressed to me
@@ -163,13 +163,17 @@ WorldView
 
 Design rules carried from §1: own state full; neighbours **fog-limited to ownership + rough strength only** (no hidden enemy state); compact (small lists, top-of-book elsewhere). The type is a deeply-immutable record graph so a `WorldView` handed to a (possibly slow, possibly remote) Sovereign cannot be mutated under the orchestrator.
 
+**`NeighbourView` frontier/colonise fields (E10-01).** Three additive, fog-safe fields end the scripted bot's Explore busy-loop (finding F1) and enable colonisation:
+- `explored:boolean` — `true` iff this neighbour is already **revealed/known** to the actor (its ownership/onward lanes are in hand), so re-`Explore`ing it is a redundant no-op. Under the current fog model the builder emits a neighbour **only** once it is sensor- or ally-revealed, so every surfaced neighbour has `explored == true`; the field exists so a consumer's Explore heuristic is explicit and stays correct if a later card surfaces genuinely-unexplored frontier ids (then `false`). A consumer **must not** `Explore` a neighbour with `explored == true`.
+- `colonisablePlanets[]:planetId` and `reachableViaFleet?:fleetId` — non-empty/present **only** for a **neutral** (unowned) system the actor has an **idle own fleet parked at**: the ids of that neutral's planets (so a `Colonize` can name one) and the id of the delivering fleet. This is fog-safe by construction: it exposes only planet *ids* of a neutral the actor has physically reached — never owned/enemy planet rosters, economy or garrison — so the default-deny posture is preserved. Empty list / empty fleet otherwise (the neutral is not colonisable yet). A `Colonize(planet, reachableViaFleet)` so derived is shaped to pass `ActionValidator` (neutral host, owned fleet, fleet stationed at host).
+
 ### 7b. Scripted bot (`ScriptedSovereign`) behaviour
 
 Deterministic, legible heuristics for tests and empty seats — **no LLM, no Spring, no randomness, no wall-clock**. Same `WorldView` ⇒ same `AgentResponse`, every run. To avoid map/set iteration-order nondeterminism it sorts candidate ids before choosing. Priority ladder (first applicable wins; all emitted actions are shape-valid and target only actor-knowable, owned assets so they pass `ActionValidator`):
 
 1. **Build economy** — on an owned planet with a free slot, queue a building it can afford (lowest planet id, lowest free slot, first affordable building type in a fixed order).
-2. **Colonize** — if it has a fleet and a reachable neutral (unowned) neighbour planet, colonize it. *(Gated until E3-02 surfaces neutral-planet detail; conservative/off by default this card.)*
-3. **Explore** — if it has an idle fleet and an unexplored/neutral neighbour system, explore it.
-4. **Hold** — otherwise emit the explicit no-op.
+2. **Colonize** (E10-01) — else, if a neutral neighbour `isColonisable()` (the bot has an idle fleet parked at it and the view surfaces its planet ids), colonize the lowest-id planet of the lowest-id such neutral via its `reachableViaFleet`. *(Previously deferred in E3-01; now enabled because fog (E3-02) + lanes (E2-03) surface the neutral-planet detail + a delivering fleet.)*
+3. **Explore** — else, if it has an idle fleet and a neutral neighbour that is **not already revealed/`explored`**, explore the lowest-id such system. A neighbour already in the view is revealed, so it is **never re-explored** (E10-01, finding F1: the old ladder re-explored the same revealed neutral every tick — 2117 no-op Explores/hour).
+4. **Hold** — otherwise emit the explicit no-op. The ladder **never** falls through to a redundant Explore.
 
 The bot emits at most one primary action per tick (plus `Hold` when idle), keeping it simple and its output trivially replayable.

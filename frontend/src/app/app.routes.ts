@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -34,6 +35,23 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/spectator/spectator.component').then(
         (m) => m.SpectatorComponent,
+      ),
+  },
+  {
+    // Username-only dev auth login page (feat/dev-jwt-auth).
+    path: 'login',
+    loadComponent: () =>
+      import('./features/auth/login.component').then(
+        (m) => m.LoginComponent,
+      ),
+  },
+  {
+    // Authenticated commander dashboard -- shows owned games (feat/dev-jwt-auth).
+    path: 'me',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/dashboard/my-games.component').then(
+        (m) => m.MyGamesComponent,
       ),
   },
 ];

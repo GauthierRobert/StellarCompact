@@ -79,6 +79,13 @@ export interface StompConnectionConfig {
   readonly factionId?: string;
   /** WebSocket endpoint URL (defaults to `/ws`). */
   readonly brokerURL?: string;
+  /**
+   * JWT access token for authenticated STOMP handshakes (feat/dev-jwt-auth).
+   * When present, appended as ?access_token=<jwt> so the broker can verify the
+   * principal server-side and pin the STOMP session to that user.
+   * Anonymous spectator connects omit this field; no token = no header.
+   */
+  readonly accessToken?: string;
 }
 
 // REST overlay resync response shape (E6-03 endpoint).
@@ -166,7 +173,12 @@ export class StompClientService implements OnDestroy {
     const principal = config.principal ?? 'anonymous';
     const rawUrl = config.brokerURL ?? '/ws';
     // Append handshake query params as required by websocket-protocol.md.
-    const brokerURL = `${rawUrl}?principal=${encodeURIComponent(principal)}&gameId=${encodeURIComponent(config.gameId)}`;
+    // access_token is appended last when present so the broker can verify the
+    // JWT and pin the STOMP session principal; absent for anonymous spectators.
+    let brokerURL = `${rawUrl}?principal=${encodeURIComponent(principal)}&gameId=${encodeURIComponent(config.gameId)}`;
+    if (config.accessToken) {
+      brokerURL += `&access_token=${encodeURIComponent(config.accessToken)}`;
+    }
 
     this.client = this.clientFactory({
       brokerURL,

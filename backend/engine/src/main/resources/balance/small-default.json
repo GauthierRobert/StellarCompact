@@ -42,6 +42,11 @@
       "researchLab": 1
     }
   },
+  "production": {
+    "mineSoftCapPerPlanet": 3,
+    "mineTaperFactor": 0.5,
+    "energyBrownoutFactor": 0.5
+  },
   "market": {
     "matchPolicy": "priceTimePriority",
     "routeInfluencePerVolume": 0.5,

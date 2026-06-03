@@ -561,7 +561,8 @@ client/agent-visible read (flagged 🔒 below).
 > verified 720/720 tick hashes on replay; outcomes may change, the engine stays pure).
 
 ### E10-01 · Scripted bot: end the Explore busy-loop, enable colonise (F1)
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E3-01, E3-02 · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E3-01, E3-02 · **Delegate to:** agent-runtime-developer
+- **Done:** ladder is now `chooseBuild → chooseColonise → chooseExplore → Hold`; `chooseExplore` filters `explored()` neighbours (no redundant Explore — the 2117 no-ops became Holds), new `chooseColonise` emits a validator-accepted `Colonize` for a reachable neutral. `NeighbourView` extended (`explored`, `colonisablePlanets`, `reachableViaFleet`) fog-safely; spec §7a/§7b synced. Deterministic; `ThreeAgentHourMatchTest` 720/720 hashes replay.
 - **Read first:** `docs/game-design/09-three-agent-sim-findings.md` (F1), `.claude/skills/agent-sovereign`, `docs/specs/agent-io-schema.md`
 - **Do:** Stop `ScriptedSovereign` re-`Explore`-ing already-revealed neutrals every tick (2117 no-op
   Explores/hour). Only Explore unrevealed systems; once the frontier is exhausted prefer **Colonise** a
@@ -570,7 +571,8 @@ client/agent-visible read (flagged 🔒 below).
   the run stays deterministic (replay reproduces all tick hashes).
 
 ### E10-02 · Scripted bot: balance the build ladder (F2)
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E10-01 *(same `ScriptedSovereign` ladder — serialise)* · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E10-01 *(same `ScriptedSovereign` ladder — serialise)* · **Delegate to:** agent-runtime-developer
+- **Done:** new `chooseBuildType` uses the whole `BUILD_PREFERENCE` — `SOLAR_ARRAY` when energy ≤ `energyFloor` (50), `FARM` when food ≤ `foodFloor` (30), else `MINE`; deterministic stockpile-vs-floor proxy (no WorldView contract change). New constructor tunables; unit tests prove each branch.
 - **Read first:** `docs/game-design/09-three-agent-sim-findings.md` (F2), `engine/.../balance/small-default.json`
 - **Do:** Use the whole `BUILD_PREFERENCE`, not just `get(0)`=MINE: build `SOLAR_ARRAY` when energy upkeep ≥
   production / energy below a floor, `FARM` when food trends negative, else `MINE`. (Today mines drain energy to
@@ -579,7 +581,8 @@ client/agent-visible read (flagged 🔒 below).
   determinism holds.
 
 ### E10-03 · Aggressive scripted-bot variant (F5 — exercise combat/diplomacy/victory)
-- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E3-01 *(new class, parallel-ok)* · **Delegate to:** agent-runtime-developer
+- **Status:** ✅ Done · **Module:** orchestrator · **Depends on:** E3-01 *(new class, parallel-ok)* · **Delegate to:** agent-runtime-developer
+- **Done:** new `AggressiveScriptedSovereign` (shipyard → corvette → `DeclareWar` lowest-id rival respecting treaties → `Attack` lowest-id enemy system). `AggressiveMatchTest` drives `WarDeclared/BattleResolved/SystemCaptured/FactionEliminated/VictoryAchieved` and reaches a DOMINATION **VICTORY**; replay-stable. Found gaps (no WorldView war-state, `BuildFleet`/positioning still stubbed — test seeds a real fleet) noted for E1-06/E1-10.
 - **Read first:** `docs/game-design/09-three-agent-sim-findings.md` (F5), `.claude/skills/agent-sovereign`, `docs/game-design/04-combat.md`
 - **Do:** Add a second deterministic bot (e.g. `AggressiveScriptedSovereign`): shipyard → corvettes →
   `DeclareWar` → `Attack`/capture, so the headless harness actually drives combat, diplomacy and a
@@ -588,7 +591,8 @@ client/agent-visible read (flagged 🔒 below).
   fully deterministic + replayable.
 
 ### E10-04 · Close economy loops: mineral sink + energy-deficit brownout (F2/F3)
-- **Status:** ☐ Todo · **Module:** engine/balance · **Depends on:** E1-06 · **Delegate to:** game-balance-designer
+- **Status:** ✅ Done · **Module:** engine/balance · **Depends on:** E1-06 · **Delegate to:** game-balance-designer
+- **Done:** new config `production` block. **Mineral sink:** per-planet mine taper — k-th mine past `mineSoftCapPerPlanet` (3) yields `base×mineTaperFactor^(k+1)` (0.5), so per-planet yield converges (closes the 49k hoard). **Energy brownout:** verified energy was cosmetic, now energy-deficit (on pre-production energy) scales whole gross production by `energyBrownoutFactor` (0.5). Additive & inert by default (omitted profile resolves byte-identically). Spec + golden/economy tests updated.
 - **Read first:** `docs/game-design/09-three-agent-sim-findings.md` (F2,F3), `docs/specs/balance-config.md`, `.claude/skills/game-engine-determinism`
 - **Do:** Give minerals a sink so they can't hoard unbounded (gamma hit 49,670 idle): diminishing mine yield
   past N/planet or a storage cap (config). **Verify** an energy-deficit faction's mines actually brown out
@@ -596,7 +600,8 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** the 1h sim shows bounded minerals and energy as a real constraint on output; golden-hash tests updated; determinism intact.
 
 ### E10-05 · Fairness: starting-economy floor + reconcile economic-victory target (F4/F6)
-- **Status:** ☐ Todo · **Module:** orchestrator/balance · **Depends on:** E2-04, E1-15 · **Delegate to:** game-balance-designer
+- **Status:** ✅ Done · **Module:** orchestrator/balance · **Depends on:** E2-04, E1-15 · **Delegate to:** game-balance-designer
+- **Done:** config-driven home floors `homePlacement.minHomePlanetCount` (2) + `minHomeBiomeYield` (6.0) layered onto `HomePlacementGenerator` before quality scoring — a starved (1-planet) home can no longer be dealt; tolerance still bounds relative spread; placement stays pure `(seed, profile)`. F6: `small-default economic.influenceTarget` retuned 1000→700 (reachable via expansion+monuments+trade per the `A/d` ceiling), large-persistent 10000 kept + documented. Balance notes (§8) updated — also advances X-02.
 - **Read first:** `docs/game-design/09-three-agent-sim-findings.md` (F4,F6), `docs/game-design/07-victory-and-lifecycle.md`
 - **Do:** Add a starting-economy floor to `HomePlacementGenerator` (min home planet count or min aggregate biome
   yield), not just `qualityToleranceFraction` — the sim dealt 1 vs 7 home planets (7× gap). Reconcile
@@ -605,7 +610,9 @@ client/agent-visible read (flagged 🔒 below).
 - **Done when:** home draws fall within a bounded economic spread; the economic victory target is reachable by a documented strategy; balance notes updated.
 
 ### E10-06 · Validation hygiene: reject redundant Explore of a revealed system (F1)
-- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-04, E3-02 · **Delegate to:** game-engine-developer · 🔒
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-04, E3-02 · **Delegate to:** game-engine-developer · 🔒
+- **Security sign-off:** PASS (security-reviewer, X-01 pass #2) — `ALREADY_REVEALED` reason derived only from the actor's own `Faction.exploredSystems`; `TARGET_UNKNOWN` existence check fires first (no fog oracle); reveal-recording in `Resolver.stubExplore` is pure/idempotent/monotone and order-independent in the hash; no cross-faction read path. Non-blocking note: when E1-06 reveals onward lanes, add those systems to `exploredSystems` consistently.
+- **Done:** added per-faction `exploredSystems` to `Faction` (mirrors E1-13 `revealedIntel`, no GameState shape change); `ActionValidator` rejects re-Explore with new `ALREADY_REVEALED`; first-time Explore still passes; spec §4/§4a synced; engine determinism intact.
 - **Read first:** `docs/game-design/09-three-agent-sim-findings.md` (F1), `docs/specs/agent-io-schema.md`, `.claude/skills/game-engine-determinism`
 - **Do:** Make `ActionValidator` reject `Explore` of an already-revealed/explored system (a "valid no-op" today,
   ~2000 wasted resolver slots/hour) with a clear rejection reason, keeping the action log meaningful. Closed
@@ -617,12 +624,13 @@ client/agent-visible read (flagged 🔒 below).
 ## Cross-cutting cards (run continuously)
 
 ### X-01 · Security review pass (recurring) 🔒
-- **Status:** ▶ Ongoing — pass #1 recorded (Phase-2 🔒 cards) · **Delegate to:** security-reviewer
+- **Status:** ▶ Ongoing — pass #1 (Phase-2 🔒 cards) + pass #2 (E10-06) recorded · **Delegate to:** security-reviewer
 - **Read first:** `.claude/agents/security-reviewer.md`, `docs/architecture/01-system-overview.md` §3
 - **Do:** Review every 🔒-flagged card before it's marked Done: fog-of-war enforcement, agent-output validation,
   prompt-injection resistance, owner-only WorldView delivery, no hidden state leaking to client/agent.
 - **Done when:** each 🔒 card has a recorded sign-off; untrusted-client/untrusted-agent boundaries hold.
 - **Pass #1 verdicts** (E4-03/E4-04/E6-02/E6-04/E8-06): E4-03 **PASS**, E6-02 **PASS**, E8-06 **PASS**; E4-04 **PASS-with-notes** (X01-1, Low — `BuildFleet.shipSpec` reflected into the offending agent's own re-prompt; self-injection only, no fog/cross-faction breach — **FIXED**, see below); E6-04 **PASS-with-notes** (X01-2 javadoc drift — **FIXED**; X01-3 query-param handshake-auth stand-in — **tracked, must-fix before untrusted deploy**, authorization already server-side via `FactionOwnershipRegistry`). Cross-cutting: no WorldView leaks another faction's hidden state; closed `Action` schema + post-parse validation intact; determinism uncompromised.
+- **Pass #2 verdict** (E10-06): **PASS** — `ActionValidator`'s new `ALREADY_REVEALED` reads only the acting faction's own `Faction.exploredSystems`; the `TARGET_UNKNOWN` existence check still fires first so it can't be used as a fog oracle; the reason string names only the actor-supplied system id (no other-faction state); reveal-recording in `Resolver.stubExplore` is pure/idempotent/monotone and the set is canonically sorted in `StateHasher` (no iteration-order hash leak); no cross-faction read path. Non-blocking follow-up for the E1-06 implementer: when Explore reveals onward lanes, add those systems to `exploredSystems` consistently.
 
 ### X-02 · Balance coherence pass (recurring)
 - **Status:** ☐ Todo · **Delegate to:** game-balance-designer

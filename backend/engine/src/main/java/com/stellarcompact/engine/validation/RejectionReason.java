@@ -39,6 +39,18 @@ public enum RejectionReason {
     NOT_ADJACENT,
 
     /**
+     * The actor tried to {@code Explore} a system it has <em>already</em>
+     * revealed/explored (game-design 03 Explore: "Adds it to the faction's known
+     * map"); a redundant re-Explore is a no-op that wastes a resolver slot, so the
+     * validator rejects it (E10-06; 3-agent-sim finding F1). The check reads only the
+     * actor's own {@code exploredSystems} set, so the rejection references solely what
+     * the actor itself already knows - it never leaks another faction's hidden state
+     * nor whether the system is owned. The actor should explore an unrevealed frontier
+     * system, colonise, or Hold instead.
+     */
+    ALREADY_REVEALED,
+
+    /**
      * No usable path of lanes exists from the fleet's location to the destination
      * (game-design 03 MoveFleet). The well-formedness of an agent-supplied
      * {@code path[]} is checked now; lane existence is deferred to E2-03.

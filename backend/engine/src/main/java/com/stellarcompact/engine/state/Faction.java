@@ -33,6 +33,18 @@ import java.util.Set;
  * snapshot shape stays stable; it is defensively copied and the canonical hash
  * sorts it (set order never leaks). A reveal is monotone within a match - the
  * espionage step only adds to it.
+ *
+ * <p>{@code exploredSystems} (E10-06) is the set of {@link SystemId}s <em>this</em>
+ * faction has already revealed via a successful {@code Explore} (game-design 03
+ * Explore: "Adds it to the faction's known map"). It is held on the exploring
+ * faction (the same on-{@code Faction} pattern as {@code revealedIntel}) rather than
+ * as a new {@code GameState} component, keeping the snapshot shape stable. The
+ * Explore resolution step adds to it deterministically (seed-independent, pure); the
+ * validator reads it to reject a redundant Explore of an already-known system
+ * ({@code ALREADY_REVEALED}). It references only this faction's own knowledge - never
+ * another faction's hidden state - so naming it in a rejection leaks nothing. It is
+ * defensively copied, the canonical hash sorts it (set order never leaks), and it is
+ * monotone within a match.
  */
 @JsonIgnoreProperties(ignoreUnknown = false)
 public record Faction(
@@ -42,7 +54,9 @@ public record Faction(
         ResourceBundle stockpiles,
         Map<TechId, TechProgress> techProgress,
         // --- E1-13 espionage: factions this one has been scouted/revealed to ---
-        Set<FactionId> revealedIntel
+        Set<FactionId> revealedIntel,
+        // --- E10-06 explore: systems this faction has already revealed/explored ---
+        Set<SystemId> exploredSystems
 ) {
     public Faction {
         if (id == null) {
@@ -58,16 +72,30 @@ public record Faction(
         // Additive in E1-13; a null tolerated as "no intel revealed yet" so an older
         // positional caller / partial JSON degrades gracefully (forward-compatible).
         revealedIntel = revealedIntel == null ? Set.of() : Set.copyOf(revealedIntel);
+        // Additive in E10-06; a null tolerated as "nothing explored yet" so a pre-E10-06
+        // positional caller / partial JSON degrades gracefully (forward-compatible).
+        exploredSystems = exploredSystems == null ? Set.of() : Set.copyOf(exploredSystems);
     }
 
     /**
      * Backwards-compatible constructor predating the E1-13 {@code revealedIntel}
-     * set: delegates to the canonical constructor with an empty default. Lets
+     * set: delegates to the canonical constructor with empty defaults. Lets
      * pre-E1-13 callers/fixtures that build a faction positionally keep compiling.
      */
     public Faction(FactionId id, String name, double reputation, ResourceBundle stockpiles,
                    Map<TechId, TechProgress> techProgress) {
-        this(id, name, reputation, stockpiles, techProgress, Set.of());
+        this(id, name, reputation, stockpiles, techProgress, Set.of(), Set.of());
+    }
+
+    /**
+     * Backwards-compatible constructor predating the E10-06 {@code exploredSystems}
+     * set: delegates to the canonical constructor with an empty default. Lets
+     * pre-E10-06 callers/fixtures that build a faction positionally (with a
+     * {@code revealedIntel} set but no explored set) keep compiling.
+     */
+    public Faction(FactionId id, String name, double reputation, ResourceBundle stockpiles,
+                   Map<TechId, TechProgress> techProgress, Set<FactionId> revealedIntel) {
+        this(id, name, reputation, stockpiles, techProgress, revealedIntel, Set.of());
     }
 
     /**
@@ -76,7 +104,8 @@ public record Faction(
      * call site immutable.
      */
     public Faction withStockpiles(ResourceBundle newStockpiles) {
-        return new Faction(id, name, reputation, newStockpiles, techProgress, revealedIntel);
+        return new Faction(id, name, reputation, newStockpiles, techProgress, revealedIntel,
+                exploredSystems);
     }
 
     /**
@@ -85,7 +114,8 @@ public record Faction(
      * node every tick a faction researches; this keeps the call site immutable.
      */
     public Faction withTechProgress(Map<TechId, TechProgress> newTechProgress) {
-        return new Faction(id, name, reputation, stockpiles, newTechProgress, revealedIntel);
+        return new Faction(id, name, reputation, stockpiles, newTechProgress, revealedIntel,
+                exploredSystems);
     }
 
     /**
@@ -97,7 +127,8 @@ public record Faction(
      * Sovereigns read in their WorldView, so it is plain faction state.
      */
     public Faction withReputation(double newReputation) {
-        return new Faction(id, name, newReputation, stockpiles, techProgress, revealedIntel);
+        return new Faction(id, name, newReputation, stockpiles, techProgress, revealedIntel,
+                exploredSystems);
     }
 
     /**
@@ -112,6 +143,29 @@ public record Faction(
         }
         Set<FactionId> next = new LinkedHashSet<>(revealedIntel);
         next.add(spy);
-        return new Faction(id, name, reputation, stockpiles, techProgress, next);
+        return new Faction(id, name, reputation, stockpiles, techProgress, next, exploredSystems);
+    }
+
+    /**
+     * Copy-on-write: a new Faction with {@code system} added to
+     * {@code exploredSystems} (idempotent - re-exploring leaves the set unchanged).
+     * The Explore resolution step (E10-06) calls this on the <em>exploring</em>
+     * faction when an Explore resolves, recording that this faction now knows the
+     * system. Deterministic and seed-independent: the set membership is a pure
+     * function of the action log, so it does not perturb the replay contract beyond
+     * the (intended) reveal it records.
+     */
+    public Faction withExplored(SystemId system) {
+        if (exploredSystems.contains(system)) {
+            return this;
+        }
+        Set<SystemId> next = new LinkedHashSet<>(exploredSystems);
+        next.add(system);
+        return new Faction(id, name, reputation, stockpiles, techProgress, revealedIntel, next);
+    }
+
+    /** @return {@code true} iff this faction has already explored/revealed {@code system}. */
+    public boolean hasExplored(SystemId system) {
+        return exploredSystems.contains(system);
     }
 }

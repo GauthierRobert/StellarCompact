@@ -50,19 +50,26 @@ public record BalanceProfile(
         // --- E9-01 small->large progression & identity/reputation-only carry-over ---
         Progression progression,
         // --- E9-03 tournament/season aggregation & leaderboard weights ---
-        Season season
+        Season season,
+        // --- E10-04 production sink (mine taper) + energy-deficit brownout ---
+        // Appended LAST (not slotted next to resources/population) so every existing
+        // positional constructor below stays valid: an older profile/fixture that ends
+        // at {@code season} (or earlier) gets {@link Production#defaults()} (inert: no
+        // taper, no brownout) and keeps the golden hash byte-identical. The JSON key is
+        // {@code "production"} regardless of field order (Jackson maps by name).
+        Production production
 ) {
 
     /**
      * Compact constructor. Movement (E1-09), home placement (E2-04), espionage
-     * (E1-13), influence (E1-14) and progression (E9-01) are all additive; a profile
-     * (or fixture) that omits any of them gets the inert defaults
+     * (E1-13), influence (E1-14), progression (E9-01) and production (E10-04) are all
+     * additive; a profile (or fixture) that omits any of them gets the inert defaults
      * ({@link Movement#defaults()} = free travel/interception off,
      * {@link HomePlacement#defaults()}, {@link Espionage#defaults()} = ops always fail /
      * are never detected, {@link Influence#defaults()} = no accrual, no decay,
-     * {@link Progression#defaults()} = SMALL galaxy / open seat / no reputation carry) so
-     * it stays loadable and deterministic (forward-compatible, like the tech DAG /
-     * terraform chain defaults).
+     * {@link Progression#defaults()} = SMALL galaxy / open seat / no reputation carry,
+     * {@link Production#defaults()} = no mine taper, no brownout) so it stays loadable
+     * and deterministic (forward-compatible, like the tech DAG / terraform chain defaults).
      */
     public BalanceProfile {
         movement = movement == null ? Movement.defaults() : movement;
@@ -71,6 +78,36 @@ public record BalanceProfile(
         influence = influence == null ? Influence.defaults() : influence;
         progression = progression == null ? Progression.defaults() : progression;
         season = season == null ? Season.defaults() : season;
+        production = production == null ? Production.defaults() : production;
+    }
+
+    /**
+     * Backwards-compatible constructor through {@code season} (no E10-04
+     * {@code production} block): delegates to the canonical constructor with
+     * {@link Production#defaults()}. Lets pre-E10-04 fixtures/profiles that build a
+     * profile positionally (through {@code season}) keep compiling unchanged.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick,
+            HomePlacement homePlacement,
+            Espionage espionage,
+            Influence influence,
+            Progression progression,
+            Season season) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, homePlacement, espionage,
+                influence, progression, season, Production.defaults());
     }
 
     /**
@@ -98,7 +135,7 @@ public record BalanceProfile(
             Progression progression) {
         this(name, version, resources, population, market, construction, combat,
                 movement, tech, diplomacy, victory, tick, homePlacement, espionage,
-                influence, progression, Season.defaults());
+                influence, progression, Season.defaults(), Production.defaults());
     }
 
     /**
@@ -273,6 +310,85 @@ public record BalanceProfile(
     ) {
         public Population {
             capByBuilding = Map.copyOf(capByBuilding);
+        }
+    }
+
+    /**
+     * E10-04 production sink + energy-deficit brownout (3-agent-sim findings F2/F3).
+     * Closes two open economy loops the headless 3-agent match exposed:
+     *
+     * <ul>
+     *   <li><b>Mineral sink (F3).</b> Mines poured out minerals every tick with no
+     *       sink, so a bot that stopped building at slot-cap hoarded ~50k idle minerals.
+     *       The taper bounds per-planet mine output: the first
+     *       {@code mineSoftCapPerPlanet} ACTIVE mines on a planet yield full base; every
+     *       mine beyond that yields {@code base x mineTaperFactor^(k)} where {@code k}
+     *       is its index past the soft cap (a geometric decay). Because
+     *       {@code Sum(mineTaperFactor^k)} converges, total mine yield per planet is
+     *       <em>bounded no matter how many mines are crammed in</em>, so minerals can no
+     *       longer hoard without bound. Applies to {@link
+     *       com.stellarcompact.engine.state.BuildingType#MINE} only (the resource the
+     *       sim flagged); other producers are unaffected.</li>
+     *   <li><b>Energy brownout (F2).</b> Energy deficit previously only attrited fleets;
+     *       mines kept producing minerals "for free", so energy was a cosmetic, not a
+     *       real, constraint. Under an energy deficit (the faction's pre-production
+     *       stockpile + this tick's other income cannot cover its accrued upkeep on the
+     *       Energy axis) ALL of the faction's production is scaled by
+     *       {@code energyBrownoutFactor} in {@code [0,1]} - a starved economy throttles
+     *       output, making Energy load-bearing.</li>
+     * </ul>
+     *
+     * <p>Both knobs are inert by default ({@link #defaults()}: soft cap large enough to
+     * never bite, taper {@code 1.0} = no decay, brownout {@code 1.0} = full output) so a
+     * profile that omits the block resolves byte-identically to the pre-E10-04 engine.
+     *
+     * <ul>
+     *   <li>{@code mineSoftCapPerPlanet} - number of ACTIVE mines per planet that yield
+     *       full base minerals before the taper engages (>= 0; the (k+1)-th mine past
+     *       this cap is taper-reduced).</li>
+     *   <li>{@code mineTaperFactor} - geometric decay applied per mine past the soft cap,
+     *       in {@code [0,1]}. {@code 1.0} = no taper (every mine full); {@code 0.0} = a
+     *       hard cap (mines past the soft cap yield nothing). A value in between bounds
+     *       total per-planet mine yield to {@code softCap x base + base x f/(1-f)}.</li>
+     *   <li>{@code energyBrownoutFactor} - multiplier on ALL production while the faction
+     *       is in Energy deficit this tick, in {@code [0,1]}. {@code 1.0} = no brownout;
+     *       {@code 0.0} = a deficit faction produces nothing.</li>
+     * </ul>
+     */
+    public record Production(
+            int mineSoftCapPerPlanet,
+            double mineTaperFactor,
+            double energyBrownoutFactor
+    ) {
+        /**
+         * Compact constructor: floors the soft cap at 0 and clamps both fractions into
+         * {@code [0,1]} so a malformed profile can neither amplify production (factor &gt;
+         * 1) nor drive it negative.
+         */
+        public Production {
+            if (mineSoftCapPerPlanet < 0) {
+                mineSoftCapPerPlanet = 0;
+            }
+            mineTaperFactor = clampUnit(mineTaperFactor);
+            energyBrownoutFactor = clampUnit(energyBrownoutFactor);
+        }
+
+        private static double clampUnit(double v) {
+            if (v < 0.0) {
+                return 0.0;
+            }
+            return Math.min(v, 1.0);
+        }
+
+        /**
+         * Inert defaults for a profile that omits the E10-04 block: an effectively
+         * unreachable soft cap (so no planet ever tapers), {@code 1.0} taper (no decay)
+         * and {@code 1.0} brownout (full output under deficit) - i.e. exactly the
+         * pre-E10-04 economy. A real match supplies the block (the shipped
+         * {@code small-default} / {@code large-persistent} profiles do).
+         */
+        public static Production defaults() {
+            return new Production(Integer.MAX_VALUE, 1.0, 1.0);
         }
     }
 

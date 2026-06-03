@@ -90,6 +90,15 @@ public final class BalanceProfileLoader {
         require(pop.baseCap() >= 0, "population.baseCap must be >= 0");
         require(!pop.capByBuilding().isEmpty(), "population.capByBuilding must be non-empty");
 
+        // production (E10-04 mineral sink + energy-deficit brownout). Additive: a
+        // profile may omit the block (the record supplies inert defaults), but any
+        // value supplied must be in range. The record already floors/clamps; these
+        // asserts make a malformed authored value fail loudly at load.
+        BalanceProfile.Production prod = req(p.production(), "production");
+        require(prod.mineSoftCapPerPlanet() >= 0, "production.mineSoftCapPerPlanet must be >= 0");
+        require(prob(prod.mineTaperFactor()), "production.mineTaperFactor must be in [0,1]");
+        require(prob(prod.energyBrownoutFactor()), "production.energyBrownoutFactor must be in [0,1]");
+
         // market
         BalanceProfile.Market m = req(p.market(), "market");
         require(m.matchPolicy() != null && !m.matchPolicy().isBlank(), "market.matchPolicy must be set");

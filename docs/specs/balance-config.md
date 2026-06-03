@@ -13,6 +13,10 @@ balanceProfile:
   population:
     growthPerFoodSurplus: ..
     capByBuilding: { ... }
+  production:                          # E10-04 mineral sink + energy-deficit brownout (3-agent-sim F2/F3)
+    mineSoftCapPerPlanet: ..           # ACTIVE mines per planet that yield FULL base minerals before the taper engages (>= 0)
+    mineTaperFactor: ..                # geometric decay in [0,1] applied per mine PAST the soft cap: the k-th mine past the cap yields base × factor^(k+1). factor<1 ⇒ Σ converges ⇒ per-planet mine yield is BOUNDED (the F3 mineral sink). 1.0 = no taper, 0.0 = hard cap (mines past the cap yield nothing). MINE only
+    energyBrownoutFactor: ..           # multiplier in [0,1] on ALL of a faction's production while it is in ENERGY deficit this tick (pre-production Energy stockpile + Energy income cannot cover accrued Energy upkeep). Makes Energy a REAL constraint (F2), not cosmetic. 1.0 = no brownout, 0.0 = a starved faction produces nothing. Decided on PRE-production energy, so a faction cannot bootstrap itself out of brownout within the same tick
   market:
     matchPolicy: priceTimePriority
     routeInfluencePerVolume: ..
@@ -109,6 +113,11 @@ balanceProfile:
 ```
 
 **Home placement (E2-04).** A pure function of `(gameSeed, lane graph, homePlacement config)` chooses one home system per faction such that (a) every pair of homes is at least `minSeparationHops` lane hops apart, and (b) the chosen homes' neighbourhood-quality scores — colonisable build capacity + habitable cradles + resource accessibility within `neighbourhoodHops` hops — all fall inside a band of width `qualityToleranceFraction × maxChosenQuality`, so no faction is gifted a runaway start. If the galaxy cannot satisfy the request (too few cradle candidates, or no separated+balanced set exists) placement fails deterministically rather than cramming factions together. The authoritative numbers live here; the framework-free `galaxy` module receives them via a mirror `HomePlacementConfig` (it cannot depend on the engine).
+
+### Production sink & energy-deficit brownout (E10-04)
+Closes the two open economy loops the headless 3-agent 1-hour match exposed (`docs/game-design/09-three-agent-sim-findings.md` F2/F3), in the passive PRODUCTION step (`EconomyResolution`). Pure arithmetic, no new RNG; the block is **additive and inert by default** (`mineSoftCapPerPlanet = MAX`, both factors `1.0`) so a profile that omits it resolves byte-identically to the pre-E10-04 engine.
+- **Mineral sink (F3).** Mines poured out minerals every tick with no sink, so a bot that stopped building at slot-cap hoarded ~50k idle minerals. The **per-planet mine taper** bounds mine output: the first `mineSoftCapPerPlanet` ACTIVE mines on a planet yield full base; the `k`-th mine past the cap yields `base × mineTaperFactor^(k+1)`. Mines are taken in stable **slotIndex order** so the taper assignment is deterministic. With `mineTaperFactor < 1` the geometric sum converges, so **total mine yield per planet is bounded no matter how many mines are crammed in** — minerals can no longer hoard without bound. Applies to `MINE` only (the producer the sim flagged); other producers are untouched.
+- **Energy brownout (F2).** Energy deficit previously only attrited fleets; mines kept producing minerals "for free", so Energy was cosmetic. A faction is in **Energy deficit** this tick when its **pre-production** Energy (current stockpile + any Energy already credited this tick) cannot cover its accrued Energy upkeep (prior escrow + this step's upkeep). When so, its **whole gross production** (every resource) is scaled by `energyBrownoutFactor`, making Energy a real constraint. Brownout is decided on **pre-production** Energy on purpose: a faction's own fresh production cannot bootstrap it out of the brownout within the same tick — it must build a `SOLAR_ARRAY` / stop starving Energy to recover next tick. The energy-deficit *attrition* (fleet losses) is unchanged and still keyed off the post-flow overdraft test; brownout stacks on top of it.
 
 ### Espionage resolution (E1-13)
 - Each `Espionage(target, operationType)` runs in resolution step 2, drawing one seeded generator keyed by `gameSeed ⊕ tick ⊕ opId` (`opId` = pure fn of actor/target/operation/submission-order, in `SaltDomain.ESPIONAGE`). From it: a **success** roll then a **detection** roll — deterministic per `(seed, tick, opId)`.

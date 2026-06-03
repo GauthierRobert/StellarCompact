@@ -79,6 +79,7 @@ final class EconomyResolution {
      */
     static GameState resolve(GameState state, BalanceProfile profile, SpendLedger ledger) {
         BalanceProfile.Population popCfg = profile.population();
+        BalanceProfile.Production prodCfg = profile.production();
 
         // Visit factions in a stable id order so the fold is replay-stable.
         List<FactionId> factionOrder = new ArrayList<>(state.factions().keySet());
@@ -88,7 +89,9 @@ final class EconomyResolution {
         for (FactionId fid : factionOrder) {
             Faction faction = state.factions().get(fid);
 
-            // 1+2. Production (inflow) and building upkeep, summed over owned systems.
+            // 1+2. Gross production (inflow) and building upkeep, summed over owned
+            //       systems. Production is computed GROSS here; the energy-deficit
+            //       brownout (F2) scales it below, once upkeep is known.
             ResourceBundle production = ResourceBundle.ZERO;
             ResourceBundle upkeep = ResourceBundle.ZERO;
 
@@ -103,6 +106,22 @@ final class EconomyResolution {
 
             // Fleet upkeep (ships consume Energy/Food per spec), stable fleet order.
             upkeep = upkeep.plus(fleetUpkeep(state, fid, profile));
+
+            // E10-04 / F2 energy brownout. A faction is in ENERGY deficit this tick when
+            // its pre-production Energy (current stockpile + any Energy already credited
+            // this tick by an earlier step) cannot cover its accrued Energy upkeep
+            // (prior escrow + this step's upkeep). A starved economy must throttle
+            // output, so its WHOLE gross production is scaled by energyBrownoutFactor -
+            // making Energy a real constraint, not a cosmetic one. Brownout is decided
+            // on PRE-production energy on purpose: the faction's own fresh production
+            // cannot bootstrap it out of the brownout within the same tick (it must
+            // build a SOLAR_ARRAY / stop starving energy to recover next tick).
+            double energyAvailable = faction.stockpiles().energy() + ledger.creditedTo(fid).energy();
+            double energyOwed = ledger.accrued(fid).energy() + upkeep.energy();
+            boolean energyDeficit = energyAvailable < energyOwed;
+            if (energyDeficit && prodCfg.energyBrownoutFactor() < 1.0) {
+                production = production.scale(prodCfg.energyBrownoutFactor());
+            }
 
             // Route net resource flow through the authoritative settle seam.
             if (!production.equals(ResourceBundle.ZERO)) {
@@ -161,11 +180,19 @@ final class EconomyResolution {
                                                    BalanceProfile profile) {
         ResourceBundle biomeYield = biomeYield(planet.biome(), profile);
         double popFactor = 1.0 + planet.population() * profile.population().productionPerPop();
+        BalanceProfile.Production prodCfg = profile.production();
 
         EnumMap<OutputResource, Double> tech = techMultipliers(faction, profile);
 
+        // E10-04 / F3 mineral sink: the per-planet mine taper. Visit buildings in
+        // stable slot order so the taper assignment (which mine is the k-th) is
+        // deterministic; count ACTIVE mines as we go and decay each mine past the
+        // soft cap by mineTaperFactor^(index past cap). With a factor < 1 the
+        // geometric sum converges, so total mine yield per planet is bounded no
+        // matter how many mines exist - minerals can no longer hoard without bound.
         double energy = 0, minerals = 0, food = 0, techOut = 0, influence = 0;
-        for (Building b : planet.buildings()) {
+        int mineIndex = 0;
+        for (Building b : orderedBuildings(planet)) {
             if (b.status() != BuildingStatus.ACTIVE) {
                 continue; // idle / under-construction buildings produce nothing
             }
@@ -175,6 +202,10 @@ final class EconomyResolution {
             }
             double base = component(biomeYield, out);
             double yield = base * popFactor * tech.getOrDefault(out, 1.0);
+            if (b.type() == BuildingType.MINE) {
+                yield *= mineTaper(mineIndex, prodCfg);
+                mineIndex++;
+            }
             switch (out) {
                 case ENERGY -> energy += yield;
                 case MINERALS -> minerals += yield;
@@ -184,6 +215,27 @@ final class EconomyResolution {
             }
         }
         return new ResourceBundle(energy, minerals, food, techOut, influence);
+    }
+
+    /**
+     * The mine-yield multiplier for the {@code mineIndex}-th ACTIVE mine on a planet
+     * (0-based). Mines within the soft cap yield full base ({@code 1.0}); the k-th
+     * mine past the cap yields {@code mineTaperFactor^(k+1)}. A factor of {@code 1.0}
+     * (the inert default) means no taper at all. Pure, allocation-free.
+     */
+    private static double mineTaper(int mineIndex, BalanceProfile.Production prodCfg) {
+        int past = mineIndex - prodCfg.mineSoftCapPerPlanet();
+        if (past < 0) {
+            return 1.0; // within the soft cap: full yield
+        }
+        return Math.pow(prodCfg.mineTaperFactor(), past + 1);
+    }
+
+    /** Planet buildings in a stable slot order so the mine taper is deterministic. */
+    private static List<Building> orderedBuildings(Planet planet) {
+        List<Building> ordered = new ArrayList<>(planet.buildings());
+        ordered.sort(Comparator.comparingInt(Building::slotIndex));
+        return ordered;
     }
 
     /**

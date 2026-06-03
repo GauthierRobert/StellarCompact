@@ -132,7 +132,10 @@ class EconomyResolutionTest {
     void deficitFloorsStockpileAndAttritesFleet() {
         // FROZEN MINE produces minerals 1 (pop 0 -> popFactor 1). Upkeep: mine
         // energy 1 + 10 corvettes (energy 1, food 1 each) = energy 11, food 10.
-        // Stockpile all zero -> energy & food deficit; minerals net +1.
+        // Stockpile all zero -> energy & food deficit; minerals net +1, but the
+        // E10-04 energy brownout (factor 0.5) now halves gross production under the
+        // energy deficit, so the mine credits 1 * 0.5 = 0.5 minerals (F2: energy is a
+        // real constraint, not cosmetic).
         Planet p = planet(Biome.FROZEN, 0, List.of(active(0, BuildingType.MINE)));
         Fleet fleet = new Fleet(FLEET, ALPHA, Optional.of(SYS), Optional.empty(),
                 FleetStance.BALANCED, List.of(new Ship("corvette", 10)));
@@ -141,11 +144,81 @@ class EconomyResolutionTest {
         ResourceBundle s = alphaOf(after).stockpiles();
         assertEquals(0.0, s.energy(), 1e-9, "energy floored at zero, never negative");
         assertEquals(0.0, s.food(), 1e-9, "food floored at zero, never negative");
-        assertEquals(1.0, s.minerals(), 1e-9, "minerals credited 1");
+        assertEquals(0.5, s.minerals(), 1e-9, "minerals credited 1, browned out to 0.5");
 
         // deficitAttritionRate 0.10 -> ceil(10*0.10) = 1 lost -> 9 remain.
         int remaining = after.fleets().get(FLEET).ships().get(0).count();
         assertEquals(9, remaining, "fleet attrites under deficit");
+    }
+
+    // ---- (d) E10-04 mineral sink (mine taper, F3) -----------------------------
+
+    @Test
+    void mineTaperEngagesPastSoftCapAndBoundsPerPlanetMineYield() {
+        // VOLCANIC mine base minerals = 5. softCap = 3, taperFactor = 0.5. Five ACTIVE
+        // mines, pop 0 -> popFactor 1, no tech. Energy: VOLCANIC base 3 per mine (no
+        // SOLAR_ARRAY producer here, but mines themselves yield no energy) -> energy
+        // upkeep = 5 mines * 1 = 5; with a big energy stockpile there is no brownout,
+        // isolating the taper. Expected minerals:
+        //   mines 0,1,2 (within cap): 5 + 5 + 5 = 15
+        //   mine 3 (k=0 past cap): 5 * 0.5^1 = 2.5
+        //   mine 4 (k=1 past cap): 5 * 0.5^2 = 1.25
+        //   total = 18.75  (vs 25 with no taper -> the sink bites)
+        Planet p = planet(Biome.VOLCANIC, 0, List.of(
+                active(0, BuildingType.MINE), active(1, BuildingType.MINE),
+                active(2, BuildingType.MINE), active(3, BuildingType.MINE),
+                active(4, BuildingType.MINE)));
+        ResourceBundle stock = new ResourceBundle(1000, 1000, 1000, 1000, 1000);
+        GameState after = resolve(stateWith(stock, p, List.of()));
+
+        ResourceBundle s = alphaOf(after).stockpiles();
+        // energy = 1000 - 5 upkeep (5 mines * 1.0); VOLCANIC mines yield no energy.
+        assertEquals(995.0, s.energy(), 1e-9, "energy = 1000 - 5 mine upkeep");
+        assertEquals(1018.75, s.minerals(), 1e-9, "minerals = 1000 + tapered 18.75 (sink engaged)");
+    }
+
+    @Test
+    void minesWithinSoftCapAreNotTapered() {
+        // Three VOLCANIC mines exactly at the softCap (3) -> all full: 5*3 = 15.
+        Planet p = planet(Biome.VOLCANIC, 0, List.of(
+                active(0, BuildingType.MINE), active(1, BuildingType.MINE),
+                active(2, BuildingType.MINE)));
+        ResourceBundle stock = new ResourceBundle(1000, 1000, 1000, 1000, 1000);
+        GameState after = resolve(stateWith(stock, p, List.of()));
+        assertEquals(1015.0, alphaOf(after).stockpiles().minerals(), 1e-9,
+                "three mines at the soft cap yield full 15, no taper");
+    }
+
+    // ---- (e) E10-04 energy-deficit brownout (F2) ------------------------------
+
+    @Test
+    void energyDeficitBrownsOutAllProduction() {
+        // ARID base: energy 1, minerals 4, food 1. A MINE + a FARM, pop 0. Mine upkeep
+        // energy 1 + farm upkeep energy 1 = 2 energy owed. Pre-production energy
+        // stockpile 0 (and ARID mine/farm produce no energy that could pre-empt it,
+        // and brownout is decided pre-production anyway) -> energy deficit -> brownout.
+        // Gross: minerals 4 (mine), food 1 (farm). Browned out by 0.5 -> minerals 2,
+        // food 0.5. Energy stockpile floors at 0.
+        Planet p = planet(Biome.ARID, 0, List.of(
+                active(0, BuildingType.MINE), active(1, BuildingType.FARM)));
+        GameState after = resolve(stateWith(new ResourceBundle(0, 100, 100, 0, 0), p, List.of()));
+        ResourceBundle s = alphaOf(after).stockpiles();
+        assertEquals(0.0, s.energy(), 1e-9, "energy floored at zero under deficit");
+        assertEquals(102.0, s.minerals(), 1e-9, "minerals 4 browned out to 2 (factor 0.5)");
+        assertEquals(100.5, s.food(), 1e-9, "food 1 browned out to 0.5 (factor 0.5)");
+    }
+
+    @Test
+    void energySurplusProducesFullOutputNoBrownout() {
+        // Same planet but a fat energy stockpile covers upkeep -> no deficit, no
+        // brownout: full minerals 4, full food 1.
+        Planet p = planet(Biome.ARID, 0, List.of(
+                active(0, BuildingType.MINE), active(1, BuildingType.FARM)));
+        GameState after = resolve(stateWith(new ResourceBundle(100, 100, 100, 0, 0), p, List.of()));
+        ResourceBundle s = alphaOf(after).stockpiles();
+        assertEquals(98.0, s.energy(), 1e-9, "energy = 100 - 2 upkeep");
+        assertEquals(104.0, s.minerals(), 1e-9, "minerals full 4, no brownout");
+        assertEquals(101.0, s.food(), 1e-9, "food full 1, no brownout");
     }
 
     @Test

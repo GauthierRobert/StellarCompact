@@ -6,8 +6,10 @@ import com.stellarcompact.engine.state.BuildingType;
 import com.stellarcompact.engine.state.Faction;
 import com.stellarcompact.engine.state.FactionId;
 import com.stellarcompact.engine.state.Fleet;
+import com.stellarcompact.engine.state.FleetId;
 import com.stellarcompact.engine.state.GameState;
 import com.stellarcompact.engine.state.Planet;
+import com.stellarcompact.engine.state.PlanetId;
 import com.stellarcompact.engine.state.Ship;
 import com.stellarcompact.engine.state.SystemId;
 import com.stellarcompact.engine.state.TechId;
@@ -161,8 +163,26 @@ public final class WorldViewBuilder {
             }
             // Fog-limited: ownership + rough strength + last-seen only. No planets,
             // no economy, no garrison detail.
+            //
+            // E10-01: a revealed neighbour is "explored" (its ownership/onward lanes are
+            // in hand), so a Sovereign must not re-Explore it. For a NEUTRAL system the
+            // actor has physically reached (an idle own fleet parked there), additionally
+            // surface its colonisable planet ids + the delivering fleet id so the bot can
+            // emit a Colonize the validator accepts. This leaks only planet ids of a
+            // neutral the actor already occupies - never owned/enemy detail, so fog holds.
+            boolean neutral = sys.owner().isEmpty();
+            Optional<FleetId> colonyFleet = neutral
+                    ? idleOwnFleetAt(state, self, sys.id())
+                    : Optional.empty();
+            List<PlanetId> colonisablePlanets = colonyFleet.isPresent()
+                    ? sys.planets().stream()
+                            .map(Planet::id)
+                            .sorted(Comparator.comparing(PlanetId::value))
+                            .toList()
+                    : List.of();
             neighbours.add(new WorldView.NeighbourView(
-                    sys.id(), sys.owner(), roughStrength(sys), state.tick()));
+                    sys.id(), sys.owner(), roughStrength(sys), state.tick(),
+                    true, colonisablePlanets, colonyFleet));
         }
 
         // Own fleets only. Hidden enemy fleets (out of sensor range) are never
@@ -255,6 +275,22 @@ public final class WorldViewBuilder {
             }
         }
         return reach;
+    }
+
+    /**
+     * The lowest-id idle (parked, not en route) fleet {@code self} owns that is parked
+     * at {@code system}, if any (E10-01). Used to surface a delivering fleet for a
+     * colonisable neutral neighbour. Deterministic: fleets are compared by id so the
+     * choice never depends on {@code HashMap} iteration order. A fleet that is en route
+     * (its location empty / an in-flight path) cannot deliver a colony.
+     */
+    private static Optional<FleetId> idleOwnFleetAt(GameState state, FactionId self, SystemId system) {
+        return state.fleets().values().stream()
+                .filter(f -> f.owner().equals(self))
+                .filter(f -> !(f.enroutePath().isPresent() && !f.enroutePath().get().isEmpty()))
+                .filter(f -> f.location().isPresent() && f.location().get().equals(system))
+                .map(Fleet::id)
+                .min(Comparator.comparing(FleetId::value));
     }
 
     private static List<TechId> techKnown(Faction me) {

@@ -4,6 +4,7 @@ import com.stellarcompact.engine.action.Action;
 import com.stellarcompact.engine.action.AgentResponse;
 import com.stellarcompact.engine.state.BuildingType;
 import com.stellarcompact.engine.state.FactionId;
+import com.stellarcompact.engine.state.PlanetId;
 import com.stellarcompact.engine.state.SystemId;
 
 import java.util.Comparator;
@@ -35,16 +36,18 @@ import java.util.Optional;
  *       faction holds at least {@link #minMineralsToBuild} Minerals (a conservative
  *       affordability proxy, since per-building cost lives in the balance profile,
  *       not in the {@code WorldView}).</li>
- *   <li><b>Explore</b> - else, if it has an idle fleet and a neutral (unowned)
- *       neighbouring system, {@link Action.Explore} the lowest-id such system.</li>
- *   <li><b>Hold</b> - otherwise the explicit no-op.</li>
+ *   <li><b>Colonise</b> - else, if it has an idle fleet parked at a reachable neutral
+ *       (unowned) neighbour with a nameable planet, {@link Action.Colonize} the
+ *       lowest-id planet of the lowest-id such system via that fleet (E10-01: the
+ *       branch deferred in E3-01, now that fog E3-02 + lanes E2-03 surface the
+ *       neutral-planet detail and a delivering fleet).</li>
+ *   <li><b>Explore</b> - else, if it has an idle fleet and a neutral neighbour that is
+ *       <em>not already revealed/explored</em>, {@link Action.Explore} the lowest-id
+ *       such system. A neighbour already present in the view is revealed, so this is
+ *       skipped - the bot never re-Explores a known system (E10-01, finding F1: the
+ *       old ladder re-explored the same revealed neutral every tick).</li>
+ *   <li><b>Hold</b> - otherwise the explicit no-op. Never a redundant Explore.</li>
  * </ol>
- *
- * <p>Colonisation is intentionally deferred: it needs neutral-planet detail and
- * lane reachability that the authoritative fog builder (E3-02) and the lane graph
- * (E2-03) will surface; emitting it now would be guesswork that the validator would
- * reject. The legible ladder above is enough to drive a full headless match with
- * valid actions.
  */
 public final class ScriptedSovereign implements Sovereign {
 
@@ -101,6 +104,7 @@ public final class ScriptedSovereign implements Sovereign {
         // The bot is silent in negotiation: it sends no messages. Pick exactly one
         // primary action via the ladder, defaulting to the explicit Hold no-op.
         Action action = chooseBuild(view)
+                .or(() -> chooseColonise(view))
                 .or(() -> chooseExplore(view))
                 .orElseGet(Action.Hold::new);
         return AgentResponse.now(List.of(), List.of(action));
@@ -133,9 +137,42 @@ public final class ScriptedSovereign implements Sovereign {
     }
 
     /**
-     * Ladder step 2: if any fleet is idle (parked, not en route), explore the
-     * lowest-id neutral (unowned) neighbouring system. Sorting neighbours by id
-     * keeps the target canonical regardless of projected iteration order.
+     * Ladder step 2 (E10-01): colonise a reachable neutral. A neutral neighbour is
+     * colonisable when the actor has an idle fleet parked at it and the view surfaces
+     * its planet ids ({@link WorldView.NeighbourView#isColonisable()}). Colonise the
+     * lowest-id planet of the lowest-id such system via that fleet. Sorting by system
+     * id then planet id keeps the choice canonical regardless of projected iteration
+     * order. The emitted {@link Action.Colonize} is shaped to pass the validator: the
+     * planet sits on a neutral host the fleet is stationed at, and the fleet is the
+     * actor's own.
+     */
+    private Optional<Action> chooseColonise(WorldView view) {
+        return view.neighbours().stream()
+                .filter(WorldView.NeighbourView::isColonisable)
+                .min(Comparator.comparing(n -> n.systemId().value()))
+                .flatMap(this::colonizeAt);
+    }
+
+    /** Build a {@link Action.Colonize} for the lowest-id planet on a colonisable neutral. */
+    private Optional<Action> colonizeAt(WorldView.NeighbourView neutral) {
+        Optional<PlanetId> target = neutral.colonisablePlanets().stream()
+                .min(Comparator.comparing(PlanetId::value));
+        return target.flatMap(planet ->
+                neutral.reachableViaFleet().map(fleet -> new Action.Colonize(planet, fleet)));
+    }
+
+    /**
+     * Ladder step 3: if any fleet is idle (parked, not en route), explore the lowest-id
+     * neutral (unowned) neighbour that is <em>not already revealed/explored</em>.
+     * Sorting neighbours by id keeps the target canonical regardless of projected
+     * iteration order.
+     *
+     * <p><b>E10-01 (finding F1).</b> The old ladder explored the lowest-id neutral
+     * neighbour every tick - but every neighbour the fog builder surfaces is already
+     * revealed, so that re-explored a known system forever (a no-op the resolver still
+     * had to slot). Filtering on {@code !explored()} means a neighbour already in the
+     * view is never re-explored; under the current fog model (all surfaced neighbours
+     * are revealed) this yields no Explore, so the bot Holds rather than busy-looping.
      */
     private Optional<Action> chooseExplore(WorldView view) {
         boolean hasIdleFleet = view.ownFleets().stream().anyMatch(WorldView.FleetView::isIdle);
@@ -144,6 +181,7 @@ public final class ScriptedSovereign implements Sovereign {
         }
         return view.neighbours().stream()
                 .filter(WorldView.NeighbourView::isNeutral)
+                .filter(n -> !n.explored())
                 .map(WorldView.NeighbourView::systemId)
                 .min(Comparator.comparing(SystemId::value))
                 .map(Action.Explore::new);

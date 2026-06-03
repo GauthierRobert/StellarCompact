@@ -179,13 +179,57 @@ final class SovereignFixtures {
                 Map.of(FLEET_A, fleetAt(FLEET_A, ALPHA, SYS_NEUTRAL)));
     }
 
+    // === E10-02 build-ladder (F2) scenarios =====================================
+    // All three hold ample Minerals (>= the build floor) and a 3-slot empty planet,
+    // so the build step fires; only Energy/Food differ, so the chosen building TYPE
+    // is the only thing under test. ResourceBundle order is (energy, minerals, food,
+    // tech, influence).
+
+    /**
+     * ALPHA can afford to build (ample Minerals, a free slot) but its Energy stockpile
+     * is at/below the default Energy floor while Food is plentiful. The build-type
+     * heuristic must pick a SOLAR_ARRAY - the energy fix, finding F2 - over a MINE.
+     */
+    static GameState energyStarvedBuildState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(0, 1000, 1000, 0, 0))),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
+                Map.of());
+    }
+
+    /**
+     * ALPHA can afford to build, Energy is comfortably above the floor, but Food is
+     * at/below the default Food floor. The heuristic must pick a FARM over a MINE.
+     */
+    static GameState foodStarvedBuildState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 1000, 0, 0, 0))),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
+                Map.of());
+    }
+
+    /**
+     * ALPHA can afford to build and both Energy and Food are comfortably above their
+     * floors, so neither resource is under pressure: the heuristic falls through to the
+     * default MINE (the minerals engine).
+     */
+    static GameState comfortableBuildState() {
+        return build(
+                Map.of(ALPHA, faction(ALPHA, new ResourceBundle(1000, 1000, 1000, 0, 0))),
+                Map.of(SYS_A, ownedSystem(SYS_A, ALPHA, List.of(emptyPlanet(PLANET_A, 3)))),
+                Map.of());
+    }
+
     /** A spread of distinct states to prove the bot never throws on varied input. */
     static List<GameState> assortedStates() {
         return List.of(
                 richTwoFactionState(),
                 idleState(),
                 poorWithRevealedNeutralNeighbour(),
-                idleFleetParkedAtColonisableNeutral());
+                idleFleetParkedAtColonisableNeutral(),
+                energyStarvedBuildState(),
+                foodStarvedBuildState(),
+                comfortableBuildState());
     }
 
     // === Fog-of-war scenario (E3-02) ============================================

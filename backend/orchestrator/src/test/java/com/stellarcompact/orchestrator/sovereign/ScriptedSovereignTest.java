@@ -3,6 +3,7 @@ package com.stellarcompact.orchestrator.sovereign;
 import com.stellarcompact.engine.action.Action;
 import com.stellarcompact.engine.action.AgentResponse;
 import com.stellarcompact.engine.config.BalanceProfile;
+import com.stellarcompact.engine.state.BuildingType;
 import com.stellarcompact.engine.state.FactionId;
 import com.stellarcompact.engine.state.GameState;
 import com.stellarcompact.engine.validation.ActionValidator;
@@ -136,6 +137,62 @@ class ScriptedSovereignTest {
 
         assertEquals(1, response.actions().size());
         assertInstanceOf(Action.Hold.class, response.actions().get(0));
+    }
+
+    // === E10-02 build-ladder (F2): which building TYPE the bot queues ===========
+
+    /**
+     * Helper: assert the bot's single action is a {@link Action.Build} of the expected
+     * type on the lowest free slot of the lowest-id planet (placement unchanged from
+     * E10-01).
+     */
+    private static void assertBuildsType(GameState state, BuildingType expected) {
+        ScriptedSovereign bot = new ScriptedSovereign(ALPHA);
+        AgentResponse response = bot.decide(WorldViewProjection.project(state, ALPHA));
+
+        assertEquals(1, response.actions().size());
+        assertInstanceOf(Action.Build.class, response.actions().get(0));
+        Action.Build buildAction = (Action.Build) response.actions().get(0);
+        assertEquals(expected, buildAction.buildingType(),
+                "expected the heuristic to choose " + expected);
+        assertEquals(SovereignFixtures.PLANET_A, buildAction.planet(),
+                "builds on the lowest-id owned planet");
+        assertEquals(0, buildAction.slot(), "builds in the lowest free slot");
+    }
+
+    @Test
+    void buildsSolarArrayUnderEnergyPressure() {
+        // F2 core fix: Energy at/below the floor (the oceanic-home starve scenario) ->
+        // the bot builds the SOLAR_ARRAY, not yet-another MINE that would deepen the
+        // energy deficit. Minerals and Food are ample, so only Energy drives the choice.
+        assertBuildsType(SovereignFixtures.energyStarvedBuildState(), BuildingType.SOLAR_ARRAY);
+    }
+
+    @Test
+    void buildsFarmUnderFoodPressure() {
+        // Energy comfortable, Food at/below the floor -> FARM (Energy is checked first,
+        // so this proves the Food branch is reached only when Energy is fine).
+        assertBuildsType(SovereignFixtures.foodStarvedBuildState(), BuildingType.FARM);
+    }
+
+    @Test
+    void buildsMineWhenNoResourceIsUnderPressure() {
+        // Energy and Food both comfortably above their floors -> the default MINE.
+        assertBuildsType(SovereignFixtures.comfortableBuildState(), BuildingType.MINE);
+    }
+
+    @Test
+    void buildTypeChoiceIsDeterministicAcrossRunsAndFreshInstances() {
+        GameState state = SovereignFixtures.energyStarvedBuildState();
+        WorldView view = WorldViewProjection.project(state, ALPHA);
+        ScriptedSovereign bot = new ScriptedSovereign(ALPHA);
+
+        AgentResponse first = bot.decide(view);
+        AgentResponse second = bot.decide(view);
+        AgentResponse fresh = new ScriptedSovereign(ALPHA).decide(view);
+
+        assertEquals(first, second, "same WorldView must yield an equal build choice");
+        assertEquals(first, fresh, "a fresh bot must choose the same building type");
     }
 
     @Test

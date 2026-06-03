@@ -99,7 +99,8 @@ class ActionValidatorTest {
     // ===== Explore ============================================================
 
     @Test
-    void exploreKnownSystemValid() {
+    void exploreFirstTimeKnownSystemValid() {
+        // First-time Explore of a not-yet-revealed system passes (ALPHA has explored nothing).
         assertValid(validate(new Action.Explore(SYS_NEUTRAL)));
     }
 
@@ -108,6 +109,29 @@ class ActionValidatorTest {
         assertRejected(validate(new Action.Explore(
                 new com.stellarcompact.engine.state.SystemId("nowhere"))),
                 RejectionReason.TARGET_UNKNOWN);
+    }
+
+    @Test
+    void exploreAlreadyRevealedSystemRejected() {
+        // F1 (E10-06): a redundant Explore of a system already on the actor's known
+        // map is rejected ALREADY_REVEALED (the wasted-resolver-slot no-op the 3-agent
+        // sim flagged), while a first-time Explore of the same system stays valid.
+        GameState state = Fixtures.baseStateWithExplored(SYS_NEUTRAL);
+        ValidationResult.Rejected r = assertRejected(
+                ActionValidator.validate(state, ALPHA, new Action.Explore(SYS_NEUTRAL), PROFILE),
+                RejectionReason.ALREADY_REVEALED);
+        assertTrue(r.message().contains(SYS_NEUTRAL.value()),
+                "message should name the already-known system the actor itself supplied");
+    }
+
+    @Test
+    void exploreAlreadyRevealedDoesNotLeakOtherSystems() {
+        // Revealing SYS_NEUTRAL must not make a different, unrevealed system redundant:
+        // exploring SYS_B (BETA-owned, not yet on ALPHA's map) is NOT ALREADY_REVEALED.
+        // (It is rejected for other reasons under a lane network, but never here with
+        // the empty network the 4-arg overload uses; the explored set is per-system.)
+        GameState state = Fixtures.baseStateWithExplored(SYS_NEUTRAL);
+        assertValid(ActionValidator.validate(state, ALPHA, new Action.Explore(SYS_B), PROFILE));
     }
 
     // ===== Colonize ===========================================================

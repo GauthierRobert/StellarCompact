@@ -42,18 +42,39 @@ class ResolverTest {
 
     @Test
     void resolveLeavesStateUnchangedForActionsWithoutStatefulHandlers() {
-        // A batch of only soft/no-op + still-stubbed handlers (Explore/Espionage are
-        // stubs in their respective cards) must leave the tick byte-identical. NOTE:
-        // DeclareWar is deliberately excluded here because E1-09 made it stateful (it
-        // records a WarState) - see declareWarRecordsWarState below.
+        // A batch of only soft/no-op + still-stubbed handlers must leave the tick
+        // byte-identical. NOTE: DeclareWar is excluded because E1-09 made it stateful
+        // (records a WarState); Explore is excluded because E10-06 made it stateful
+        // (records the reveal on the actor's exploredSystems) - see those dedicated
+        // tests. Espionage(SCOUT) stays inert under this profile (zero success odds).
         List<SubmittedAction> inert = new ArrayList<>();
-        inert.add(new SubmittedAction(BETA, new Action.Explore(new SystemId("sysA")), 0));
         inert.add(new SubmittedAction(GAMMA, new Action.Espionage(ALPHA, EspionageOperation.SCOUT), 0));
         inert.add(new SubmittedAction(ALPHA, new Action.Hold(), 1));
         inert.add(new SubmittedAction(BETA, new Action.SendMessage(ALPHA, "hi"), 1));
         GameState before = ResolveFixtures.baseState();
         GameState after = Resolver.resolve(before, inert, PROFILE, before.gameSeed());
         assertEquals(GoldenStateHash.sha256Hex(before), GoldenStateHash.sha256Hex(after));
+    }
+
+    @Test
+    void exploreRecordsRevealOnActorAndIsIdempotent() {
+        // E10-06 (F1): a resolved Explore adds the target system to the acting
+        // faction's exploredSystems (game-design 03: "Adds it to the faction's known
+        // map"), deterministically and seed-independently. Re-exploring is idempotent.
+        GameState before = ResolveFixtures.baseState();
+        SystemId target = ResolveFixtures.SYS_A;
+        assertFalse(before.factions().get(BETA).hasExplored(target), "not yet explored");
+
+        List<SubmittedAction> batch = List.of(
+                new SubmittedAction(BETA, new Action.Explore(target), 0));
+        GameState after = Resolver.resolve(before, batch, PROFILE, before.gameSeed());
+        assertTrue(after.factions().get(BETA).hasExplored(target),
+                "Explore must record the target on the actor's known map");
+
+        // Idempotent: resolving the same Explore again does not change the snapshot.
+        GameState again = Resolver.resolve(after, batch, PROFILE, after.gameSeed());
+        assertEquals(GoldenStateHash.sha256Hex(after), GoldenStateHash.sha256Hex(again),
+                "a redundant Explore reveal is idempotent (no further state change)");
     }
 
     @Test

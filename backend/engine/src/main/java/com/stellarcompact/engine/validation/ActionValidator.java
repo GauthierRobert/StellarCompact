@@ -151,6 +151,20 @@ public final class ActionValidator {
             return ValidationResult.reject(RejectionReason.TARGET_UNKNOWN,
                     "Cannot explore unknown system " + a.targetSystem().value() + ".");
         }
+        // F1 (E10-06): reject a redundant Explore of a system the actor has ALREADY
+        // revealed/explored. Explore "Adds it to the faction's known map" (game-design
+        // 03), so re-exploring it is a no-op that wastes a resolver slot (3-agent-sim
+        // F1: ~2000/hour). The check reads only the actor's own exploredSystems set -
+        // its own knowledge - so the rejection leaks nothing about other factions or
+        // hidden state. Checked before the adjacency gate so an already-known system is
+        // reported as ALREADY_REVEALED even if it is no longer one hop away.
+        Faction actorFaction = state.factions().get(actor);
+        if (actorFaction.hasExplored(a.targetSystem())) {
+            return ValidationResult.reject(RejectionReason.ALREADY_REVEALED,
+                    "System " + a.targetSystem().value() + " is already on your known map; "
+                            + "exploring it again does nothing. Explore an unrevealed "
+                            + "neighbour, colonise, or Hold instead.");
+        }
         // F2 (E1-09): NOT_ADJACENT - the target must be one lane hop from a system the
         // actor owns or holds a fleet in. Enforced only when a lane network is supplied;
         // with LaneNetwork.EMPTY this degrades to the existence check (pre-E1-09).

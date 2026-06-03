@@ -174,6 +174,17 @@ final class Fixtures {
         return base.withMarketOrders(Map.of(customOffer.id(), customOffer));
     }
 
+    /**
+     * The base state but with {@code ALPHA} having already explored {@code system}
+     * (E10-06 F1). Used to assert the validator rejects a redundant Explore of a
+     * system already on the actor's known map.
+     */
+    static GameState baseStateWithExplored(SystemId system) {
+        GameState base = baseState();
+        Faction explored = base.factions().get(ALPHA).withExplored(system);
+        return base.withFaction(explored);
+    }
+
     static BalanceProfile profile() {
         return new BalanceProfile(
                 "small-default", 1,

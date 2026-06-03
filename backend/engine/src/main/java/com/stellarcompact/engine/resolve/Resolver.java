@@ -525,8 +525,23 @@ public final class Resolver {
         return s; // TODO(E1-06): queue ship build; escrow Minerals+Tech; reserve crew.
     }
 
+    /**
+     * E10-06: record that the actor has revealed the target system on its own known
+     * map (game-design 03 Explore: "Adds it to the faction's known map"). This is the
+     * deterministic, seed-independent reveal the validator reads to reject a redundant
+     * re-Explore (3-agent-sim finding F1, {@code ALREADY_REVEALED}). Idempotent:
+     * {@link Faction#withExplored} is a no-op when the system is already known.
+     *
+     * <p>Pure and replay-stable: the explored set is a function of the validated action
+     * log alone (no RNG, no wall-clock). Onward-lane reveal and any scout-fleet
+     * consumption remain TODO(E1-06); recording the reveal is the slice E10-06 needs.
+     */
     private static GameState stubExplore(GameState s, FactionId a, Action.Explore x, StepContext c) {
-        return s; // TODO(E1-06): reveal target system and its onward lanes.
+        Faction actor = s.factions().get(a);
+        if (actor == null) {
+            return s; // validator guarantees the actor exists; belt-and-braces.
+        }
+        return s.withFaction(actor.withExplored(x.targetSystem()));
     }
 
     private static GameState stubEstablishRoute(GameState s, FactionId a, Action.EstablishRoute x, StepContext c) {

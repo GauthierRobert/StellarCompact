@@ -83,6 +83,14 @@ Legend: ☐ Todo · ▶ Doing · ⛔ Blocked · ✅ Done · 🔒 needs security-
 - ✅ **E9-02** Replay / spectator from (seed, action log) — *deps: E1-17, E5-01, E7-06* — game-engine-developer
 - ✅ **E9-03** Tournament / season scaffolding + leaderboard — *deps: E9-01, E9-02* — game-balance-designer
 
+## E10 — Post-simulation tuning & agent depth (from 3-agent 1h sim → `docs/game-design/09-three-agent-sim-findings.md`)
+- ☐ **E10-01** Scripted bot: end Explore busy-loop, enable colonise (F1) — *deps: E3-01, E3-02* — agent-runtime-developer
+- ☐ **E10-02** Scripted bot: balance the build ladder, fix energy starve (F2) — *deps: E10-01* — agent-runtime-developer
+- ☐ **E10-03** Aggressive scripted-bot variant — exercise combat/diplomacy/victory (F5) — *deps: E3-01* — agent-runtime-developer
+- ☐ **E10-04** Close economy loops: mineral sink + energy-deficit brownout (F2/F3) — *deps: E1-06* — game-balance-designer
+- ☐ **E10-05** Fairness: starting-economy floor + reconcile economic-victory target (F4/F6) — *deps: E2-04, E1-15* — game-balance-designer
+- ☐ **E10-06** 🔒 Validation: reject redundant Explore of a revealed system (F1) — *deps: E1-04, E3-02* — game-engine-developer
+
 ## Cross-cutting (recurring)
 - ▶ **X-01** 🔒 Security review pass (recurring) — pass #1 done: E4-03/E6-02/E8-06 PASS, E4-04/E6-04 PASS-with-notes (X01-1/X01-2 fixed; X01-3 tracked) — security-reviewer
 - ▶ **X-02** Balance coherence pass (recurring) — pass #1 done: 50/50 holds, no in-config dominant strategy; 4 engine-gap follow-ups noted in `docs/game-design/08-balance-coherence-notes.md` — game-balance-designer

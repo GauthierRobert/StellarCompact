@@ -26,7 +26,12 @@ issuer/decoder. See `docs/specs/rest-api.md` → "Authentication (dev)".
 **Why:** first real trust boundary for dev; lets a logged-in user own a Sovereign and watch
 its games evolve via [[backend-jdk25-build]] api/app suites (all green).
 
-**How to apply / still TODO:** the **frontend** half (login screen, Bearer HTTP interceptor,
-`/me` dashboard, pass `access_token` to STOMP) is the remaining work. To tighten security,
-flip config-write endpoints to `authenticated()` in `SecurityConfig` once the UI always logs
-in. See [[boot4-mockmvc-security-testing]] for how the integration test is wired.
+**Frontend (commit `e5ceb01`), DONE:** `AuthService` (signals + localStorage), `authInterceptor`
+(Bearer on `/api/**` except login), `/login` (LoginComponent), `/me` (MyGamesComponent + `authGuard`,
+polls `/api/me/games` every 4s to show evolution), `MeRestClientService`, and STOMP
+`accessToken` handshake param. 266/266 frontend tests pass via `ng test --no-watch`.
+
+**Still open:** no nav link to `/login` in the app shell (navigate manually / `/me` redirects).
+To tighten security, flip config-write endpoints to `authenticated()` in `SecurityConfig` once
+the UI always logs in. `feat/dev-jwt-auth` is not yet merged/pushed. See
+[[boot4-mockmvc-security-testing]] for how the integration test is wired.

@@ -1,6 +1,7 @@
 package com.stellarcompact.engine.resolve;
 
 import com.stellarcompact.engine.config.BalanceProfile;
+import com.stellarcompact.engine.kardashev.KardashevCalculator;
 import com.stellarcompact.engine.state.ActiveSystem;
 import com.stellarcompact.engine.state.Building;
 import com.stellarcompact.engine.state.BuildingStatus;
@@ -94,7 +95,11 @@ public final class Scoring {
                 + w.tech() * techDepth(f)
                 + w.reputation() * f.reputation()
                 + w.military() * militaryStrength(state, faction, profile)
-                + w.centrality() * diplomaticCentrality(state, faction);
+                + w.centrality() * diplomaticCentrality(state, faction)
+                // E12-04: fold the Kardashev value (captured-energy standing) into the
+                // score. Weight lives in the kardashev block; the inert 0.0 default
+                // adds nothing, so a pre-E12 profile's ranking is byte-identical.
+                + profile.kardashev().scoreWeight() * KardashevCalculator.kValue(state, faction, profile);
     }
 
     // ===== raw factors (pure) =================================================

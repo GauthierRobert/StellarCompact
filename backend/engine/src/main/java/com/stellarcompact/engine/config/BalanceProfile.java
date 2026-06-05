@@ -57,7 +57,13 @@ public record BalanceProfile(
         // at {@code season} (or earlier) gets {@link Production#defaults()} (inert: no
         // taper, no brownout) and keeps the golden hash byte-identical. The JSON key is
         // {@code "production"} regardless of field order (Jackson maps by name).
-        Production production
+        Production production,
+        // --- E12 Kardashev progression (append-only; see Kardashev record above) ---
+        // Appended LAST so every existing positional constructor stays valid: a
+        // profile/fixture ending at {@code production} (or earlier) gets
+        // {@link Kardashev#defaults()} (inert: 0 W captured, K = 0) and keeps the
+        // golden hash byte-identical. JSON key {@code "kardashev"} (mapped by name).
+        Kardashev kardashev
 ) {
 
     /**
@@ -79,6 +85,38 @@ public record BalanceProfile(
         progression = progression == null ? Progression.defaults() : progression;
         season = season == null ? Season.defaults() : season;
         production = production == null ? Production.defaults() : production;
+        kardashev = kardashev == null ? Kardashev.defaults() : kardashev;
+    }
+
+    /**
+     * Backwards-compatible constructor through {@code production} (no E12
+     * {@code kardashev} block): delegates to the canonical constructor with
+     * {@link Kardashev#defaults()} (inert — 0 W captured). Lets pre-E12
+     * fixtures/profiles that build a profile positionally (through
+     * {@code production}) keep compiling unchanged.
+     */
+    public BalanceProfile(
+            String name,
+            int version,
+            Resources resources,
+            Population population,
+            Market market,
+            Construction construction,
+            Combat combat,
+            Movement movement,
+            Tech tech,
+            Diplomacy diplomacy,
+            Victory victory,
+            Tick tick,
+            HomePlacement homePlacement,
+            Espionage espionage,
+            Influence influence,
+            Progression progression,
+            Season season,
+            Production production) {
+        this(name, version, resources, population, market, construction, combat,
+                movement, tech, diplomacy, victory, tick, homePlacement, espionage,
+                influence, progression, season, production, Kardashev.defaults());
     }
 
     /**
@@ -389,6 +427,59 @@ public record BalanceProfile(
          */
         public static Production defaults() {
             return new Production(Integer.MAX_VALUE, 1.0, 1.0);
+        }
+    }
+
+    /**
+     * E12 Kardashev progression — the central energy-capture axis (game-design 06
+     * §6). A faction's captured power (watts) is derived each tick from its
+     * ACTIVE buildings + megastructures + UNLOCKED techs; {@code K = (log10(W) −
+     * 6) / 10} maps it onto the continuous Type-0..III scale. K is DERIVED (not
+     * persisted on {@code GameState}), so it adds no state-hash surface.
+     *
+     * <ul>
+     *   <li>{@code baseWattsPerSystem} — baseline planetary-grid watts per owned active system.</li>
+     *   <li>{@code populationWattFactor} — watts per unit of population.</li>
+     *   <li>{@code wattsPerBuilding} — {@code configKey → watts/tick} for energy buildings + megastructures
+     *       (only ACTIVE buildings count). Megastructure watts dwarf planetary ones — they cross the tier bands.</li>
+     *   <li>{@code techWattMultipliers} — {@code techId → multiplier} on planetary-grid watts when UNLOCKED.</li>
+     *   <li>{@code scoreWeight} — weight folding K into the ranking score (E1-15).</li>
+     *   <li>{@code ascensionRequiredTier} / {@code ascensionHoldTicks} — Ascension victory threshold
+     *       (tier reached; hold is reserved — the immediate-threshold form is enforced today).</li>
+     * </ul>
+     *
+     * The {@link #defaults()} are INERT (zero factors, empty maps ⇒ 0 W captured),
+     * so a profile omitting the block is byte-identical to the pre-E12 golden.
+     */
+    public record Kardashev(
+            double baseWattsPerSystem,
+            double populationWattFactor,
+            Map<String, Double> wattsPerBuilding,
+            Map<String, Double> techWattMultipliers,
+            double scoreWeight,
+            int ascensionRequiredTier,
+            int ascensionHoldTicks
+    ) {
+        public Kardashev {
+            wattsPerBuilding = wattsPerBuilding == null ? Map.of() : Map.copyOf(wattsPerBuilding);
+            techWattMultipliers = techWattMultipliers == null ? Map.of() : Map.copyOf(techWattMultipliers);
+            if (baseWattsPerSystem < 0.0) {
+                baseWattsPerSystem = 0.0;
+            }
+            if (populationWattFactor < 0.0) {
+                populationWattFactor = 0.0;
+            }
+            if (ascensionRequiredTier < 1) {
+                ascensionRequiredTier = 1;
+            }
+            if (ascensionHoldTicks < 0) {
+                ascensionHoldTicks = 0;
+            }
+        }
+
+        /** Inert defaults: no capture at all (0 W ⇒ K = 0), Ascension threshold Type III. */
+        public static Kardashev defaults() {
+            return new Kardashev(0.0, 0.0, Map.of(), Map.of(), 0.0, 3, 0);
         }
     }
 
@@ -786,7 +877,13 @@ public record BalanceProfile(
         /** Be the last faction with a capital, or survive to {@code survival.tickLimit}. */
         SURVIVAL,
         /** Complete and hold a galaxy Wonder for {@code wonder.holdTicks} ticks. */
-        WONDER
+        WONDER,
+        /**
+         * E12-04: reach Kardashev tier {@code kardashev.ascensionRequiredTier}
+         * (derived from captured energy). The threshold lives in the
+         * {@code kardashev} block, so the {@link Victory} record is unchanged.
+         */
+        ASCENSION
     }
 
     /** Fraction (0..1) of habitable systems required to win. */

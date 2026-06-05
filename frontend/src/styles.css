@@ -7,7 +7,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000308;
+  background: #000000;
 }
 
 app-root {
@@ -20,4 +20,193 @@ router-outlet + * {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* ===========================================================================
+   Stellar Compact — design tokens + shared HUD primitives.
+
+   Design language: see frontend/DESIGN.md (Spasex-inspired). Pure black canvas,
+   white type, uppercase D-DIN display, 1px hairlines, ghost-outlined pill CTAs.
+   No accent colour: black + white do the chromatic work; the live galaxy and
+   faction/resource data supply the only hue (the "photography" of this brand).
+
+   Tokens below follow DESIGN.md. The legacy --sc-* names are kept as aliases so
+   every component re-skins without per-file churn — only their VALUES changed.
+   Global (unscoped) so dashboard/HUD components keep their scoped styles tiny.
+   =========================================================================== */
+:root {
+  /* --- DESIGN.md type stack. D-DIN display + body; Inter/Arial fallbacks.
+         "No mono" — the legacy --sc-mono now points at the same stack so the
+         HUD loses its monospace look but keeps number alignment via
+         font-variant-numeric: tabular-nums on numeric runs. --- */
+  --din-display: 'D-DIN-Bold', 'D-DIN', 'Inter', 'Arial Narrow', Arial, Verdana, sans-serif;
+  --din-body: 'D-DIN', 'Inter', Arial, Verdana, sans-serif;
+
+  /* --- DESIGN.md colour tokens --- */
+  --canvas-night: #000000;
+  --canvas-night-soft: #0a0a0a;
+  --canvas-light: #ffffff;
+  --canvas-cool: #f0f0fa;
+  --on-primary: #ffffff;
+  --on-primary-mute: #f0f0fa;
+  --hairline-on-dark: #3a3a3f;
+  --hairline-on-light: #e0e0e8;
+  --ink: #000000;
+  --ink-mute: #5a5a5f;
+
+  /* --- DESIGN.md radius + spacing --- */
+  --rounded-xs: 4px;
+  --rounded-sm: 8px;
+  --rounded-md: 16px;
+  --rounded-pill: 32px;
+  --rounded-full: 9999px;
+
+  /* ===== Legacy --sc-* aliases, remapped onto the new palette ===== */
+  --sc-font: var(--din-body);
+  --sc-mono: var(--din-body); /* "No mono": fold mono onto the body stack */
+  --sc-display: var(--din-display);
+
+  --sc-bg: var(--canvas-night);
+  /* HUD panels float over the live galaxy; near-black + a faint blur buys
+     legibility without a glow. (Pragmatic deviation from the marketing
+     "no blur" rule — there is moving starfield behind, not graded photography.) */
+  --sc-panel: rgba(10, 10, 10, 0.82);
+  --sc-panel-solid: var(--canvas-night-soft);
+  --sc-panel-2: rgba(10, 10, 10, 0.66);
+  --sc-border: rgba(255, 255, 255, 0.14);   /* hairline-on-dark, soft */
+  --sc-border-bright: rgba(255, 255, 255, 0.30);
+  --sc-accent: #ffffff;                      /* no accent colour — white is the chrome */
+  --sc-accent-dim: rgba(255, 255, 255, 0.55);
+  --sc-text: var(--on-primary);
+  --sc-text-dim: rgba(255, 255, 255, 0.6);
+  --sc-text-faint: rgba(255, 255, 255, 0.34);
+
+  /* Functional data semantics — the only colour in the system, reserved for
+     game data (deltas, alerts, resources, factions). Kept muted so the chrome
+     stays black-and-white. */
+  --sc-good: #5fd6a4;
+  --sc-warn: #e8c061;
+  --sc-bad: #ff5468;
+  --sc-credits: #e8c061;
+  --sc-minerals: #b7c4d2;
+  --sc-energy: #7fd8ef;
+  --sc-alloys: #c2a8e8;
+  --sc-influence: #e89ac4;
+}
+
+/* Flat command panel — elevation 0, hairline edge, near-black surface. */
+.sc-panel {
+  background: var(--sc-panel);
+  border: 1px solid var(--sc-border);
+  border-radius: var(--rounded-sm);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+/* Section header inside panels — all-caps micro eyebrow (DESIGN micro-cap). */
+.sc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 11px/1 var(--din-body);
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--sc-text-dim);
+  padding: 11px 12px 9px;
+}
+.sc-head .sc-head-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--hairline-on-dark);
+}
+
+.sc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--rounded-pill);
+  background: transparent;
+  border: 1px solid var(--sc-border);
+  font: 400 12px/1 var(--din-body);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  color: var(--sc-text);
+  white-space: nowrap;
+}
+
+.sc-bar-track {
+  position: relative;
+  height: 4px;
+  border-radius: var(--rounded-full);
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.sc-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--rounded-full);
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sc-tag {
+  font: 700 9px/1 var(--din-body);
+  letter-spacing: 1.17px;
+  text-transform: uppercase;
+  padding: 3px 6px;
+  border-radius: var(--rounded-xs);
+  border: 1px solid var(--sc-border);
+}
+
+/* Ghost-outlined pill CTA — the brand's only button (DESIGN button-ghost-on-dark).
+   Transparent over the canvas, 1px white hairline, uppercase caps label. */
+.sc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  font: 700 12px/1 var(--din-body);
+  letter-spacing: 1.17px;
+  text-transform: uppercase;
+  color: var(--sc-text);
+  background: transparent;
+  border: 1px solid var(--sc-border-bright);
+  border-radius: var(--rounded-pill);
+  padding: 8px 14px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+}
+.sc-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--on-primary);
+}
+.sc-btn:active { transform: translateY(1px); }
+.sc-btn--active {
+  background: var(--on-primary);
+  border-color: var(--on-primary);
+  color: var(--ink);
+}
+
+/* Thin, monochrome scrollbars for HUD lists. */
+.sc-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+.sc-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
+.sc-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--rounded-full);
+}
+.sc-scroll::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes sc-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.sc-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--on-primary);
+  animation: sc-pulse 1.6s ease-in-out infinite;
 }

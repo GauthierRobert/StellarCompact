@@ -41,18 +41,18 @@ import { EventsStore, type PublicEvent } from '../../stores';
       align-items: center;
       gap: 8px;
       padding: 4px 12px;
-      background: rgba(0, 3, 8, 0.82);
-      border-top: 1px solid rgba(80, 180, 255, 0.14);
-      font-family: 'Courier New', monospace;
+      background: var(--sc-panel);
+      border-top: 1px solid var(--sc-border);
+      font-family: var(--din-body);
       font-size: 11px;
-      color: #b0d8f0;
+      color: var(--sc-text);
       overflow: hidden;
     }
     .feed-label {
-      font-size: 9px;
+      font: 400 9px/1 var(--din-body);
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: rgba(80, 180, 255, 0.45);
+      letter-spacing: 1.6px;
+      color: var(--sc-text-dim);
       flex-shrink: 0;
     }
     .feed-scroll {
@@ -65,28 +65,31 @@ import { EventsStore, type PublicEvent } from '../../stores';
     .feed-scroll::-webkit-scrollbar { display: none; }
     .event-chip {
       white-space: nowrap;
-      padding: 1px 6px;
-      border-radius: 2px;
-      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: var(--rounded-xs);
+      font: 700 9px/1 var(--din-body);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
       border: 1px solid transparent;
     }
-    .event-chip--war      { color: #f06060; border-color: rgba(240,96,96,0.4); }
-    .event-chip--treaty   { color: #4ad6a0; border-color: rgba(74,214,160,0.4); }
-    .event-chip--battle   { color: #f0a060; border-color: rgba(240,160,96,0.4); }
-    .event-chip--capture  { color: #a0c0f0; border-color: rgba(160,192,240,0.4); }
-    .event-chip--route    { color: rgba(80,180,255,0.8); border-color: rgba(80,180,255,0.25); }
-    .event-chip--victory  { color: #ffd700; border-color: rgba(255,215,0,0.4); }
-    .event-chip--elim     { color: #c060c0; border-color: rgba(192,96,192,0.4); }
-    .event-chip--default  { color: #b0d8f0; border-color: rgba(80,180,255,0.2); }
+    .event-chip--war      { color: var(--sc-bad);      border-color: rgba(255, 84, 104, 0.35); }
+    .event-chip--treaty   { color: var(--sc-good);     border-color: rgba(95, 214, 164, 0.35); }
+    .event-chip--battle   { color: var(--sc-warn);     border-color: rgba(232, 192, 97, 0.35); }
+    .event-chip--capture  { color: var(--sc-minerals); border-color: rgba(183, 196, 210, 0.35); }
+    .event-chip--route    { color: var(--sc-energy);   border-color: rgba(127, 216, 239, 0.35); }
+    .event-chip--victory  { color: var(--sc-credits);  border-color: rgba(232, 192, 97, 0.45); }
+    .event-chip--elim     { color: var(--sc-influence); border-color: rgba(232, 154, 196, 0.35); }
+    .event-chip--default  { color: var(--sc-text-dim); border-color: var(--sc-border); }
     .tick-badge {
-      font-size: 10px;
-      color: rgba(80,180,255,0.4);
+      font: 400 10px/1 var(--sc-mono);
+      color: var(--sc-text-faint);
       flex-shrink: 0;
       font-variant-numeric: tabular-nums;
     }
     .feed-empty {
+      font: 400 11px/1 var(--din-body);
       font-style: italic;
-      color: rgba(80,180,255,0.3);
+      color: var(--sc-text-faint);
     }
   `],
 })

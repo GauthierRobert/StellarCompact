@@ -98,6 +98,45 @@ describe('GalaxyComponent', () => {
     fixture.destroy();
   });
 
+  it('wheel zoom step is normalised + clamped (a huge deltaY does not lurch)', () => {
+    const fixture = create();
+    const c = fixture.componentInstance;
+    const tzBefore = camera.state().tz;
+    // A single device event with a very large deltaY (high-res mouse / smooth
+    // scroll spike) must NOT translate into a huge zoom jump.
+    c.onWheel({
+      clientX: 10,
+      clientY: 10,
+      deltaY: -5000,
+      deltaMode: 0,
+      preventDefault: () => undefined,
+    } as unknown as WheelEvent);
+    const step = camera.state().tz - tzBefore;
+    expect(step).toBeGreaterThan(0);
+    // Per-event step is clamped to a bounded exponent (~one notch), so zoom feel
+    // is consistent across mice / trackpads / OS smooth-scroll.
+    expect(step).toBeLessThanOrEqual(0.26 + 1e-9);
+    fixture.destroy();
+  });
+
+  it('double-click never zooms OUT — it only deepens an already-deep zoom', () => {
+    const fixture = create();
+    const c = fixture.componentInstance as unknown as {
+      sceneStars: unknown[];
+      onDblClick: (e: MouseEvent) => void;
+    };
+    // a star at the click point, and a camera already deeper than the dive floor
+    c.sceneStars = [
+      { id: 1, x: 0, y: 0, k: 4, b: 1, sz: 1, g: 0, activeSystemId: 7 },
+    ];
+    camera.jumpTo(0, 0, 12);
+    const tzBefore = camera.state().tz;
+    c.onDblClick({ clientX: 0, clientY: 0 } as unknown as MouseEvent);
+    // old `max(tz, 9)` would have snapped 12 -> 9 (zoom OUT); now it dives further
+    expect(camera.state().tz).toBeGreaterThanOrEqual(tzBefore);
+    fixture.destroy();
+  });
+
   it('double-click on empty space drives camera.jumpTo (zooms in by ~2.2)', () => {
     const fixture = create();
     const c = fixture.componentInstance;

@@ -64,7 +64,12 @@
       "shipyard": 12,
       "defensePlatform": 10,
       "monument": 30,
-      "terraformerStep": 18
+      "terraformerStep": 18,
+      "orbitalLattice": 60,
+      "dysonSwarm": 160,
+      "stellarEngine": 140,
+      "matrioshkaBrain": 120,
+      "blackHoleTap": 240
     },
     "costs": {
       "mine":            { "energy": 0.0, "minerals": 40.0,  "food": 0.0, "tech": 0.0,  "influence": 0.0 },
@@ -75,7 +80,12 @@
       "shipyard":        { "energy": 0.0, "minerals": 100.0, "food": 0.0, "tech": 25.0, "influence": 0.0 },
       "defensePlatform": { "energy": 0.0, "minerals": 90.0,  "food": 0.0, "tech": 15.0, "influence": 0.0 },
       "monument":        { "energy": 0.0, "minerals": 250.0, "food": 0.0, "tech": 80.0, "influence": 0.0 },
-      "terraformer":     { "energy": 0.0, "minerals": 120.0, "food": 0.0, "tech": 50.0, "influence": 0.0 }
+      "terraformer":     { "energy": 0.0, "minerals": 120.0,  "food": 0.0, "tech": 50.0,  "influence": 0.0 },
+      "orbitalLattice":  { "energy": 0.0, "minerals": 500.0,  "food": 0.0, "tech": 120.0, "influence": 0.0 },
+      "dysonSwarm":      { "energy": 0.0, "minerals": 2000.0, "food": 0.0, "tech": 500.0, "influence": 0.0 },
+      "stellarEngine":   { "energy": 0.0, "minerals": 1500.0, "food": 0.0, "tech": 450.0, "influence": 0.0 },
+      "matrioshkaBrain": { "energy": 0.0, "minerals": 1400.0, "food": 0.0, "tech": 600.0, "influence": 0.0 },
+      "blackHoleTap":    { "energy": 0.0, "minerals": 3500.0, "food": 0.0, "tech": 900.0, "influence": 0.0 }
     },
     "terraformChain": {
       "toxic": "arid",
@@ -145,7 +155,15 @@
       "shielding": 110.0,
       "diplomaticCorps": 80.0,
       "intelligenceAgency": 110.0,
-      "monumentalWorks": 200.0
+      "monumentalWorks": 200.0,
+      "orbitalCollectors": 150.0,
+      "planetaryUnification": 1400.0,
+      "dysonTheory": 350.0,
+      "matrioshkaMinds": 800.0,
+      "starLifting": 800.0,
+      "stellarMastery": 3000.0,
+      "blackHoleForge": 800.0,
+      "galacticAscendancy": 5500.0
     },
     "times": {
       "improvedExtraction": 12,
@@ -160,7 +178,15 @@
       "shielding": 18,
       "diplomaticCorps": 15,
       "intelligenceAgency": 18,
-      "monumentalWorks": 30
+      "monumentalWorks": 30,
+      "orbitalCollectors": 24,
+      "planetaryUnification": 240,
+      "dysonTheory": 60,
+      "matrioshkaMinds": 140,
+      "starLifting": 140,
+      "stellarMastery": 480,
+      "blackHoleForge": 140,
+      "galacticAscendancy": 800
     },
     "multipliers": {
       "improvedExtraction": 1.25,
@@ -184,14 +210,27 @@
       "shielding": ["corvetteDoctrine"],
       "diplomaticCorps": [],
       "intelligenceAgency": ["diplomaticCorps"],
-      "monumentalWorks": ["marketNetworks"]
+      "monumentalWorks": ["marketNetworks"],
+      "orbitalCollectors": ["marketNetworks"],
+      "planetaryUnification": ["orbitalCollectors"],
+      "dysonTheory": ["orbitalCollectors"],
+      "matrioshkaMinds": ["dysonTheory"],
+      "starLifting": ["dysonTheory", "capitalDoctrine"],
+      "stellarMastery": ["starLifting"],
+      "blackHoleForge": ["starLifting"],
+      "galacticAscendancy": ["blackHoleForge"]
     },
     "unlocks": {
       "corvetteDoctrine": ["corvette"],
       "cruiserDoctrine": ["cruiser"],
       "capitalDoctrine": ["capital"],
       "marketNetworks": ["marketHub"],
-      "monumentalWorks": ["monument"]
+      "monumentalWorks": ["monument"],
+      "orbitalCollectors": ["orbitalLattice"],
+      "dysonTheory": ["dysonSwarm"],
+      "matrioshkaMinds": ["matrioshkaBrain"],
+      "starLifting": ["stellarEngine"],
+      "blackHoleForge": ["blackHoleTap"]
     }
   },
   "diplomacy": {
@@ -289,5 +328,26 @@
     "winBonus": 25.0,
     "participationBonus": 2.0,
     "minMatchesForSeat": 3
+  },
+  "kardashev": {
+    "baseWattsPerSystem": 1.0e15,
+    "populationWattFactor": 5.0e10,
+    "wattsPerBuilding": {
+      "solarArray": 3.0e14,
+      "monument": 2.0e14,
+      "orbitalLattice": 4.0e15,
+      "dysonSwarm": 1.5e26,
+      "stellarEngine": 5.0e24,
+      "matrioshkaBrain": 3.0e24,
+      "blackHoleTap": 2.0e36
+    },
+    "techWattMultipliers": {
+      "planetaryUnification": 1.6,
+      "stellarMastery": 1.4,
+      "galacticAscendancy": 1.3
+    },
+    "scoreWeight": 50.0,
+    "ascensionRequiredTier": 3,
+    "ascensionHoldTicks": 60
   }
 }

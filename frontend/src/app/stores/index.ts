@@ -44,4 +44,7 @@ export type {
   ScaleTier,
   SelectedSystemInfo,
   SelectedPlanetInfo,
+  SelectedObjectInfo,
+  SelectedSectorInfo,
+  ObjectStat,
 } from './selection.store';

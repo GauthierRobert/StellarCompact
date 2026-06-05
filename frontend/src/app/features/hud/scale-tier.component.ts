@@ -30,35 +30,16 @@ import type { ScaleTier } from '../../stores/selection.store';
   styles: [`
     :host { display: block; }
     .scale-badge {
-      padding: 3px 9px;
-      border-radius: 2px;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
-      letter-spacing: 1.5px;
+      padding: 4px 10px;
+      border-radius: var(--rounded-pill);
+      font: 700 10px/1 var(--din-body);
+      letter-spacing: 1.17px;
       text-transform: uppercase;
-      border: 1px solid transparent;
+      border: 1px solid var(--sc-border);
+      background: var(--sc-panel);
+      color: var(--sc-text-dim);
       white-space: nowrap;
       pointer-events: none;
-    }
-    .scale-badge--galaxy {
-      color: rgba(80,180,255,0.6);
-      border-color: rgba(80,180,255,0.2);
-      background: rgba(0,3,8,0.7);
-    }
-    .scale-badge--region {
-      color: rgba(74,214,160,0.7);
-      border-color: rgba(74,214,160,0.25);
-      background: rgba(0,3,8,0.7);
-    }
-    .scale-badge--system {
-      color: rgba(255,210,100,0.75);
-      border-color: rgba(255,210,100,0.25);
-      background: rgba(0,3,8,0.7);
-    }
-    .scale-badge--planet {
-      color: rgba(200,140,255,0.75);
-      border-color: rgba(200,140,255,0.25);
-      background: rgba(0,3,8,0.7);
     }
   `],
 })

@@ -153,6 +153,41 @@ class VictoryEvaluationTest {
         return events;
     }
 
+    /** Rebuild a profile with a custom Kardashev block (E12-04 Ascension victory). */
+    private static BalanceProfile withKardashev(BalanceProfile b, BalanceProfile.Kardashev k) {
+        return new BalanceProfile(b.name(), b.version(), b.resources(), b.population(),
+                b.market(), b.construction(), b.combat(), b.movement(), b.tech(), b.diplomacy(),
+                b.victory(), b.tick(), b.homePlacement(), b.espionage(), b.influence(),
+                b.progression(), b.season(), b.production(), k);
+    }
+
+    // ---- E12-04 Ascension victory --------------------------------------------
+
+    @Test
+    void ascensionVictoryFiresWhenAFactionReachesTheRequiredKardashevTier() {
+        // ASCENSION, required tier 2; a completed Dyson Swarm captures 1.5e26 W (Type II).
+        BalanceProfile base = profile(VictoryKind.ASCENSION, true, false,
+                0.6, 1000.0, 0.6, 100, 3, weights());
+        BalanceProfile p = withKardashev(base, new BalanceProfile.Kardashev(
+                0.0, 0.0, Map.of("dysonSwarm", 1.5e26), Map.of(), 0.0, 2, 0));
+
+        Building dyson = new Building(0, BuildingType.DYSON_SWARM, BuildingStatus.ACTIVE, 0);
+        GameState win = state(5L,
+                Map.of(ALPHA, faction(ALPHA, 0), BETA, faction(BETA, 0)),
+                List.of(ownedSystem("s1", ALPHA, List.of(dyson)), neutralSystem("s2")),
+                List.of());
+        assertEquals(List.of(ALPHA), winners(evaluate(win, p)),
+                "alpha with a completed Dyson Swarm (Type II) wins Ascension");
+
+        // No megastructure ⇒ no faction reaches the tier ⇒ no Ascension win.
+        GameState peace = state(5L,
+                Map.of(ALPHA, faction(ALPHA, 0), BETA, faction(BETA, 0)),
+                List.of(ownedSystem("s1", ALPHA, List.of(monument(0))), neutralSystem("s2")),
+                List.of());
+        assertEquals(0, victories(evaluate(peace, p)),
+                "without a megastructure Ascension does not fire");
+    }
+
     private static long victories(List<PublicEvent> events) {
         return events.stream().filter(e -> e instanceof PublicEvent.VictoryAchieved).count();
     }

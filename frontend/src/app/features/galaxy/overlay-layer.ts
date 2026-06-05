@@ -1,5 +1,11 @@
 import type { RouteOverlay, SystemOverlay } from '../../stores';
-import type { RenderOverlayMark, RenderRoute, RenderStar } from './render-model';
+import type {
+  RenderFogReveal,
+  RenderOverlayMark,
+  RenderRoute,
+  RenderStar,
+  RenderTerritory,
+} from './render-model';
 
 /**
  * Active-overlay compositing layer (E8-06) — the CLIENT-SIDE join between the
@@ -144,6 +150,86 @@ export function buildOverlayRoutes(
       kind: r.kind,
       len: Math.hypot(a.x - b.x, a.y - b.y),
     });
+  }
+  return out;
+}
+
+/** Default vision radius (world units) revealed around an explored system. */
+export const DEFAULT_VISION_RADIUS = 95;
+
+/**
+ * Build per-faction empire influence fields by grouping the visible owned
+ * systems by controlling faction. Each territory carries the faction tint and
+ * the world positions of that faction's in-view systems, which the renderer
+ * paints as a summed additive glow. Unowned systems and factions with no visible
+ * node (or no resolvable colour) are skipped. Bounded by the visible systems.
+ */
+export function buildTerritories(
+  systems: readonly SystemOverlay[],
+  starsById: ReadonlyMap<string, RenderStar>,
+  colourOf: FactionColourLookup,
+): RenderTerritory[] {
+  if (systems.length === 0 || starsById.size === 0) {
+    return [];
+  }
+  const byFaction = new Map<string, { x: number; y: number }[]>();
+  for (const sys of systems) {
+    if (sys.ownerFactionId === null) {
+      continue;
+    }
+    const star = starsById.get(sys.systemId);
+    if (!star) {
+      continue;
+    }
+    let nodes = byFaction.get(sys.ownerFactionId);
+    if (!nodes) {
+      nodes = [];
+      byFaction.set(sys.ownerFactionId, nodes);
+    }
+    nodes.push({ x: star.x, y: star.y });
+  }
+  const out: RenderTerritory[] = [];
+  for (const [factionId, nodes] of byFaction) {
+    const tint = hexToRgb01(colourOf(factionId));
+    if (!tint || nodes.length === 0) {
+      continue;
+    }
+    out.push({ factionId, tint, nodes });
+  }
+  return out;
+}
+
+/**
+ * Build the fog-of-war reveal set: one soft vision disk around every visible
+ * explored/monitored system, plus a disk around the camera's current world
+ * position so the immediate surroundings are always navigable. The renderer
+ * darkens everything outside the union of these disks. Bounded by the visible
+ * known systems; nothing hidden is implied. Owned systems get a slightly wider
+ * reveal than merely-sighted ones, so an empire's core reads as well-lit.
+ */
+export function buildFogReveals(
+  systems: readonly SystemOverlay[],
+  starsById: ReadonlyMap<string, RenderStar>,
+  camWorld: { x: number; y: number },
+  camRevealRadius: number,
+  visionRadius = DEFAULT_VISION_RADIUS,
+): RenderFogReveal[] {
+  const out: RenderFogReveal[] = [];
+  for (const sys of systems) {
+    const star = starsById.get(sys.systemId);
+    if (!star) {
+      continue;
+    }
+    const owned = sys.ownerFactionId !== null;
+    const activityBoost = 1 + 0.12 * Math.min(2, sys.activityLevel);
+    out.push({
+      x: star.x,
+      y: star.y,
+      r: visionRadius * (owned ? 1.25 : 0.85) * activityBoost,
+    });
+  }
+  if (camRevealRadius > 0) {
+    out.push({ x: camWorld.x, y: camWorld.y, r: camRevealRadius });
   }
   return out;
 }

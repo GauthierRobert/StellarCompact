@@ -163,6 +163,39 @@ Closes the two open economy loops the headless 3-agent 1-hour match exposed (`do
 - **Feeds the seat gate (no fork).** The season aggregate drives the SAME small→large gate as a single match: a `SeasonStanding` is projected back into a `StandingRecord` (aggregate→`score`, season rank→`placement`, best reputation→`reputation`) and handed to `ProgressionEvaluation.admits`. A Sovereign whose season aggregate clears `progression.seatThresholdScore` (or wins, when `progression.winGrantsSeat`) is admitted to a LARGE galaxy; one below is denied. An extra season guard requires `season.minMatchesForSeat` plays before the aggregate may clear a seat (a single lucky match cannot buy a campaign seat). Per-match scoring (E1-15) and seat gating (E9-01) are **reused, never re-implemented**.
 - All of this is pure engine logic in `engine.season` (`Season`, `SeasonStanding`, `SeasonAggregation`); a `Season` is an immutable, append-only value object (`withMatch` returns a fresh season) and `leaderboard(profile)` derives the ranking on demand. Assembling a season as matches conclude, persisting it, and exposing a season-standings read are orchestration/api concerns that call these pure functions.
 
+### Kardashev progression (E12 — central spine)
+
+The Kardashev scale is the central progression axis (game-design 06 §6). A faction's standing is the
+energy it captures, in watts; `K = (log10(W) − 6) / 10` maps that onto a continuous scale (Type I ≈ 10¹⁶ W,
+II ≈ 10²⁶ W, III ≈ 10³⁶ W). K is **derived** each tick from the authoritative state — it is **not** persisted
+on `GameState`, so it adds no state-hash surface and the replay contract is unchanged.
+
+- **New balance block `kardashev`** (append-only, last field on `BalanceProfile`; the inert `Kardashev.defaults()`
+  — empty maps, zero factors — means a profile omitting it captures 0 W and is byte-identical to the pre-E12 golden):
+  - `baseWattsPerSystem` — baseline planetary-grid watts per owned active system.
+  - `populationWattFactor` — watts per unit of population (planetary grid).
+  - `wattsPerBuilding` — `configKey → watts/tick`, for the energy buildings + megastructures (e.g.
+    `solarArray`, `monument`, `orbitalLattice`, `dysonSwarm`, `stellarEngine`, `matrioshkaBrain`, `blackHoleTap`).
+    Only ACTIVE buildings count; megastructure watts dwarf planetary ones (this is what crosses the tier bands).
+  - `techWattMultipliers` — `techId → multiplier` applied to the planetary-grid watts when that tech is UNLOCKED.
+  - `scoreWeight` — weight folding K into the ranking score (E1-15 `Scoring`).
+  - `ascensionRequiredTier`, `ascensionHoldTicks` — the Ascension victory threshold (tier reached; hold reserved).
+- **Megastructures = staged building types.** They are ordinary `BuildingType` values (`ORBITAL_LATTICE`,
+  `DYSON_SWARM`, `STELLAR_ENGINE`, `MATRIOSHKA_BRAIN`, `BLACK_HOLE_TAP`) built via the existing `Build` action and
+  pipeline (cost in `construction.costs`, time in `construction.buildTimes`, flips to ACTIVE after its build time).
+  "Staging" is the *sequence* of ever-larger types, each **tech-gated** by listing its `configKey` under the gating
+  tech's `tech.unlocks` (reusing the existing `capabilityUnlocked` gate — no new validator code). Their captured
+  watts come from `kardashev.wattsPerBuilding`; they produce **no** ordinary economy resource (`outputOf → null`).
+- **Ascension tech.** The Ascension branch nodes (`orbitalCollectors`, `dysonTheory`, `starLifting`,
+  `matrioshkaMinds`, `blackHoleForge`, and the milestone gates `planetaryUnification`/`stellarMastery`/
+  `galacticAscendancy`) are ordinary `tech.costs`/`times`/`prereqs`/`unlocks` entries with **steep times** —
+  advanced tech takes far longer than simple tech (T0≈5t … Ascension III≈400t small; ≈2× large). Their `unlocks`
+  gate the megastructure building types; the milestone gates carry the Kardashev tiers.
+- **Ascension victory (E12-04).** A new `victory.active = ASCENSION` fires when a faction's derived K-tier reaches
+  `kardashev.ascensionRequiredTier`. The parameters live in the `kardashev` block (so the `Victory` record is
+  unchanged); only the `VictoryKind.ASCENSION` constant + the evaluator case are added. K also folds into the
+  weighted ranking score via `kardashev.scoreWeight`.
+
 ## Rules
 - Two named profiles to ship: `small-default` and `large-persistent`.
 - The engine reads only from the active profile; no literal gameplay constants in code.

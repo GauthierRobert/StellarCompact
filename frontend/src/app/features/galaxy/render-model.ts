@@ -146,6 +146,121 @@ export interface RenderOverlayMark {
   readonly blockaded: boolean;
 }
 
+/**
+ * An empire influence field (E-immersive). One per faction with visible owned
+ * systems: a tint plus the world positions of that faction's controlled systems.
+ * The renderer sums soft additive gaussians at each node to paint a glowing
+ * territory region — the "this space belongs to X" read at galaxy/region zoom,
+ * without per-pixel borders. Bounded by the visible owned systems, never the
+ * catalog. Fog-correct: built only from systems present in the overlay store.
+ */
+export interface RenderTerritory {
+  readonly factionId: string;
+  /** Ownership tint RGB 0..1. */
+  readonly tint: readonly [number, number, number];
+  /** World positions of this faction's controlled, in-view systems. */
+  readonly nodes: readonly { readonly x: number; readonly y: number }[];
+}
+
+/** A single vision-reveal disk for the fog-of-war veil (world units). */
+export interface RenderFogReveal {
+  readonly x: number;
+  readonly y: number;
+  /** Vision radius in world units. */
+  readonly r: number;
+}
+
+/**
+ * Fog-of-war veil description. When `enabled`, the renderer darkens unexplored
+ * space and clears it only inside the union of `reveals` (a soft disk around
+ * every explored/monitored system, plus the camera's local surroundings). When
+ * disabled (debug toggle), the whole galaxy is shown. The reveal set is bounded
+ * by the visible known systems; nothing hidden is implied — the fog is a visual
+ * veil over data the server already fog-filtered.
+ */
+export interface RenderFog {
+  readonly enabled: boolean;
+  readonly reveals: readonly RenderFogReveal[];
+}
+
+/**
+ * The closed set of discrete deep-space objects the renderer can draw. These are
+ * the "other interstellar objects" beyond stars: luminous gas clouds, compact
+ * remnants and exotic phenomena. Each kind has a bespoke procedural look in the
+ * draw layers (NASA-photo inspired) and a bespoke detail panel in the HUD.
+ */
+export type InterstellarKind =
+  | 'nebula' // emission/reflection gas cloud (Orion/Carina look)
+  | 'blackhole' // accretion disk + gravitational-lensing photon ring
+  | 'pulsar' // neutron star with sweeping twin beams
+  | 'wormhole' // swirling spacetime aperture (traversable anomaly)
+  | 'asteroidField' // scattered rocky belt
+  | 'roguePlanet' // unbound sunless world drifting between stars
+  | 'supernovaRemnant'; // expanding shock shell (Veil/Crab look)
+
+/**
+ * A discrete interstellar object to draw at a world position, independent of the
+ * star field. Unlike the procedural nebula *shader* (a full-screen backdrop),
+ * these are addressable, hit-testable entities: the player can click one to open
+ * its detail panel, and each carries a stable id so selection/labels are stable
+ * across frames. Bounded by the visible set, never the catalog.
+ */
+export interface RenderObject {
+  /** Stable id (matches SelectedObjectInfo.objectId). */
+  readonly id: string;
+  readonly kind: InterstellarKind;
+  /** World position of the object centre. */
+  readonly x: number;
+  readonly y: number;
+  /** Visual extent in world units (drives the drawn radius + hit radius). */
+  readonly r: number;
+  /** Primary tint RGB 0..1 (gas glow / disk / beam colour). */
+  readonly tint: readonly [number, number, number];
+  /** Optional secondary tint RGB 0..1 (2nd cloud lobe / inner disk / halo). */
+  readonly tint2?: readonly [number, number, number];
+  /** Stable phase 0..2π so rotation/sweep animation is deterministic per object. */
+  readonly phase: number;
+  /** True when this object is the current selection (drawn with a focus ring). */
+  readonly selected?: boolean;
+  /** LOD cross-fade weight in [0,1] (see RenderStar.a). Defaults to 1. */
+  readonly a?: number;
+}
+
+/**
+ * A single addressable sector of the galaxy — one cell of a coarse square grid
+ * laid over world space. Sectors give the map a navigable "Google-Maps gridded"
+ * structure: each is named, hit-testable (click to open the sector summary), and
+ * tinted by its dominant controlling faction. Drawn as a soft boundary + label
+ * overlay, gated to region/galaxy zoom so it never clutters the system view.
+ */
+export interface RenderSector {
+  /** Stable id "S{col}.{row}" (matches SelectedSectorInfo.sectorId). */
+  readonly id: string;
+  /** Evocative display name, e.g. "Orion Reach". */
+  readonly name: string;
+  /** Sector centre in world units. */
+  readonly cx: number;
+  readonly cy: number;
+  /** Half-extent (world units) of the square sector from its centre. */
+  readonly half: number;
+  /** Dominant-owner tint RGB 0..1, or null when contested/empty. */
+  readonly tint: readonly [number, number, number] | null;
+  /** True when this sector is hovered (brighter boundary). */
+  readonly hovered?: boolean;
+  /** True when this sector is the current selection (filled highlight). */
+  readonly selected?: boolean;
+}
+
+/**
+ * Sector-grid overlay description. When `enabled`, the renderer draws the cell
+ * boundaries + labels (zoom-gated) so the galaxy reads as named, clickable
+ * sectors. Empty/disabled → no grid. Bounded by the in-view cells.
+ */
+export interface RenderSectors {
+  readonly enabled: boolean;
+  readonly cells: readonly RenderSector[];
+}
+
 /** A trade-lane overlay segment (world endpoints already resolved). */
 export interface RenderRoute {
   readonly id: string;
@@ -175,6 +290,33 @@ export interface RenderScene {
    * overlay state in view. Defaults to `[]` for pre-E8-06 scene builders.
    */
   readonly overlayMarks?: readonly RenderOverlayMark[];
+  /**
+   * Empire influence fields, one per faction with visible owned systems. Drawn
+   * UNDER the star field as soft additive territory glows so factions read as
+   * coloured regions, not just per-star dots. Empty/undefined → no territories.
+   */
+  readonly territories?: readonly RenderTerritory[];
+  /**
+   * Discrete interstellar objects (nebulae, black holes, pulsars, wormholes,
+   * asteroid fields, rogue planets, supernova remnants) to draw with/under the
+   * star field but BEFORE the fog veil, so distant landmarks read against black
+   * space and get veiled like scenery. Bounded by the visible set, never the
+   * catalog. Empty/undefined → none. See {@link RenderObject}.
+   */
+  readonly objects?: readonly RenderObject[];
+  /**
+   * Named sector-grid overlay (navigational UI). When enabled, the renderer
+   * draws the in-view cell boundaries + tinted fills as the LAST overlay (over
+   * the fog veil) so the grid stays readable everywhere. Empty/undefined → no
+   * grid. See {@link RenderSectors}.
+   */
+  readonly sectors?: RenderSectors;
+  /**
+   * Fog-of-war veil (E-immersive). When present and enabled, the renderer
+   * darkens space outside the explored/monitored reveal disks. Undefined →
+   * legacy behaviour (no veil). See {@link RenderFog}.
+   */
+  readonly fog?: RenderFog;
   /** Galaxy radius (world units) for the nebula glow + dust arms. */
   readonly rMax: number;
 }

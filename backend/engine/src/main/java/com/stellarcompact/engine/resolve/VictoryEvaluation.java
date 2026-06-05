@@ -1,6 +1,7 @@
 package com.stellarcompact.engine.resolve;
 
 import com.stellarcompact.engine.config.BalanceProfile;
+import com.stellarcompact.engine.kardashev.KardashevCalculator;
 import com.stellarcompact.engine.state.ActiveSystem;
 import com.stellarcompact.engine.state.Building;
 import com.stellarcompact.engine.state.BuildingStatus;
@@ -152,7 +153,26 @@ final class VictoryEvaluation {
             case DIPLOMATIC -> diplomatic(state, cfg);
             case SURVIVAL -> survival(state, profile, cfg);
             case WONDER -> wonder(state, cfg);
+            case ASCENSION -> ascension(state, profile);
         };
+    }
+
+    /**
+     * E12-04 Ascension: a faction reaches Kardashev tier
+     * {@code kardashev.ascensionRequiredTier}, derived from its captured energy
+     * ({@link KardashevCalculator}). The tier is recomputed from the authoritative
+     * snapshot — pure and deterministic — so the trigger is replay-identical. The
+     * configured {@code ascensionHoldTicks} (hold-for-N) is the counter-gated
+     * refinement; the tier threshold is the snapshot-evaluable trigger today.
+     */
+    private static List<FactionId> ascension(GameState state, BalanceProfile profile) {
+        int required = profile.kardashev().ascensionRequiredTier();
+        for (FactionId fid : sortedFactionIds(state)) {
+            if (KardashevCalculator.tier(state, fid, profile) >= required) {
+                return List.of(fid);
+            }
+        }
+        return List.of();
     }
 
     /**

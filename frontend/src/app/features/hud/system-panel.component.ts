@@ -86,79 +86,80 @@ import { SelectionStore } from '../../stores/selection.store';
       display: block;
     }
     .system-panel {
-      width: 220px;
-      background: rgba(0, 3, 8, 0.88);
-      border: 1px solid rgba(80, 180, 255, 0.22);
-      border-radius: 4px;
+      width: 240px;
+      background: var(--sc-panel);
+      border: 1px solid var(--sc-border);
+      border-radius: var(--rounded-sm);
       padding: 0;
-      font-family: 'Courier New', monospace;
+      font-family: var(--din-body);
       font-size: 12px;
-      color: #b0d8f0;
+      color: var(--sc-text);
       overflow: hidden;
     }
     .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 6px 10px;
-      background: rgba(80, 180, 255, 0.08);
-      border-bottom: 1px solid rgba(80, 180, 255, 0.12);
+      padding: 7px 10px 6px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--sc-border);
     }
     .panel-title {
-      font-size: 10px;
+      font: 400 10px/1 var(--din-body);
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: rgba(80, 180, 255, 0.6);
+      letter-spacing: 1.6px;
+      color: var(--sc-text-dim);
     }
     .close-btn {
       background: none;
       border: none;
-      color: rgba(80, 180, 255, 0.5);
-      font-size: 16px;
+      color: var(--sc-text-dim);
+      font-size: 14px;
       cursor: pointer;
       padding: 0 2px;
       line-height: 1;
+      transition: color 0.15s;
     }
-    .close-btn:hover { color: #b0d8f0; }
+    .close-btn:hover { color: var(--sc-text); }
     .system-name {
-      padding: 10px 10px 2px;
-      font-size: 14px;
-      font-weight: bold;
-      color: #e8f4ff;
-      letter-spacing: 0.5px;
+      padding: 10px 12px 2px;
+      font: 700 15px/1.1 var(--din-display);
+      text-transform: uppercase;
+      color: var(--sc-text);
+      letter-spacing: 1px;
     }
     .star-class {
-      padding: 0 10px 6px;
-      font-size: 11px;
-      color: rgba(80, 180, 255, 0.5);
+      padding: 0 12px 6px;
+      font: 400 11px/1 var(--din-body);
+      color: var(--sc-text-faint);
     }
     .badges {
       display: flex;
       gap: 6px;
-      padding: 0 10px 6px;
+      padding: 0 12px 6px;
     }
     .badge {
-      font-size: 9px;
-      letter-spacing: 1.5px;
+      font: 700 9px/1 var(--din-body);
+      letter-spacing: 1.17px;
       text-transform: uppercase;
-      padding: 1px 5px;
-      border-radius: 2px;
+      padding: 2px 6px;
+      border-radius: var(--rounded-xs);
     }
-    .badge--battle  { color: #f06060; border: 1px solid #f06060; }
-    .badge--blockade { color: #f0a060; border: 1px solid #f0a060; }
+    .badge--battle  { color: var(--sc-bad); border: 1px solid var(--sc-bad); }
+    .badge--blockade { color: var(--sc-warn); border: 1px solid var(--sc-warn); }
     .section-label {
-      padding: 6px 10px 3px;
-      font-size: 10px;
+      padding: 6px 12px 3px;
+      font: 400 10px/1 var(--din-body);
       text-transform: uppercase;
-      letter-spacing: 1px;
-      color: rgba(80, 180, 255, 0.45);
-      border-top: 1px solid rgba(80, 180, 255, 0.08);
+      letter-spacing: 1.6px;
+      color: var(--sc-text-dim);
+      border-top: 1px solid var(--sc-border);
     }
     .owner-row {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 2px 10px 6px;
+      padding: 3px 12px 7px;
     }
     .owner-dot {
       width: 8px;
@@ -166,10 +167,14 @@ import { SelectionStore } from '../../stores/selection.store';
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .owner-name { color: #e8f4ff; }
+    .owner-name {
+      font: 600 11px/1 var(--din-body);
+      color: var(--sc-text);
+    }
     .owner-unclaimed {
-      padding: 2px 10px 6px;
-      color: rgba(80, 180, 255, 0.4);
+      padding: 3px 12px 7px;
+      font: 400 11px/1 var(--din-body);
+      color: var(--sc-text-faint);
       font-style: italic;
     }
     .planet-list {
@@ -181,48 +186,48 @@ import { SelectionStore } from '../../stores/selection.store';
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
+      padding: 4px 12px;
       cursor: pointer;
       transition: background 0.1s;
     }
     .planet-item:hover {
-      background: rgba(80, 180, 255, 0.08);
+      background: rgba(255,255,255,0.05);
     }
     .planet-item:focus-visible {
-      outline: 1px solid rgba(80, 180, 255, 0.5);
+      outline: 1px solid var(--sc-border-bright);
       outline-offset: -1px;
     }
     .planet-item--empty {
-      color: rgba(80, 180, 255, 0.3);
+      color: var(--sc-text-faint);
       font-style: italic;
       cursor: default;
     }
     .planet-item--empty:hover { background: none; }
     .planet-name {
       flex: 1;
-      color: #c8e8ff;
-      font-size: 11px;
+      font: 400 11px/1 var(--din-body);
+      color: var(--sc-text);
     }
     .planet-biome {
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.5);
+      font: 400 10px/1 var(--din-body);
+      color: var(--sc-text-faint);
     }
     .planet-slots {
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.4);
+      font: 400 10px/1 var(--din-body);
+      color: var(--sc-text-faint);
       font-variant-numeric: tabular-nums;
     }
     .action-surface {
-      padding: 4px 10px 10px;
+      padding: 4px 12px 10px;
     }
     .action-hint {
-      font-size: 11px;
-      color: rgba(80, 180, 255, 0.55);
+      font: 400 11px/1.4 var(--din-body);
+      color: var(--sc-text-dim);
     }
     .action-note {
-      margin-top: 2px;
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.28);
+      margin-top: 3px;
+      font: 400 10px/1.4 var(--din-body);
+      color: var(--sc-text-faint);
       font-style: italic;
     }
   `],

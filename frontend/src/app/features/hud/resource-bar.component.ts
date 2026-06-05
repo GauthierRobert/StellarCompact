@@ -64,11 +64,11 @@ import { CommonModule } from '@angular/common';
       align-items: center;
       gap: 10px;
       padding: 6px 14px;
-      background: rgba(0, 3, 8, 0.82);
-      border-bottom: 1px solid rgba(80, 180, 255, 0.18);
-      font-family: 'Courier New', monospace;
+      background: var(--sc-panel);
+      border-bottom: 1px solid var(--sc-border);
+      font-family: var(--din-body);
       font-size: 12px;
-      color: #b0d8f0;
+      color: var(--sc-text);
       user-select: none;
       white-space: nowrap;
       overflow: hidden;
@@ -77,13 +77,13 @@ import { CommonModule } from '@angular/common';
       opacity: 0.4;
     }
     .faction-name {
-      font-weight: bold;
-      letter-spacing: 1px;
+      font: 700 11px/1 var(--din-display);
+      letter-spacing: 1.17px;
       text-transform: uppercase;
-      font-size: 11px;
+      color: var(--sc-text);
     }
     .sep {
-      color: rgba(80, 180, 255, 0.3);
+      color: var(--sc-text-faint);
     }
     .res-item, .rep-item, .systems-item {
       display: flex;
@@ -91,31 +91,31 @@ import { CommonModule } from '@angular/common';
       gap: 4px;
     }
     .icon {
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.6);
+      font: 400 10px/1 var(--din-body);
+      color: var(--sc-text-dim);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.96px;
     }
     .val {
-      color: #e8f4ff;
+      color: var(--sc-text);
       font-variant-numeric: tabular-nums;
     }
-    .rep-positive { color: #4ad6a0; }
-    .rep-negative { color: #f06060; }
-    .rep-neutral  { color: #b0d8f0; }
+    .rep-positive { color: var(--sc-good); }
+    .rep-negative { color: var(--sc-bad); }
+    .rep-neutral  { color: var(--sc-text-dim); }
     .eliminated-badge {
-      color: #f06060;
-      font-size: 10px;
-      letter-spacing: 2px;
+      color: var(--sc-bad);
+      font: 700 9px/1 var(--din-body);
+      letter-spacing: 1.17px;
       text-transform: uppercase;
-      border: 1px solid #f06060;
-      padding: 1px 5px;
-      border-radius: 2px;
+      border: 1px solid var(--sc-bad);
+      padding: 2px 6px;
+      border-radius: var(--rounded-xs);
     }
     .placeholder {
       opacity: 0.5;
       font-style: italic;
-      font-size: 11px;
+      font: 400 11px/1 var(--din-body);
     }
   `],
 })

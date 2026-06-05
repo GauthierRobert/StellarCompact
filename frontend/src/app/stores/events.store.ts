@@ -106,8 +106,18 @@ export class EventsStore {
   appendEvents(incoming: readonly PublicEvent[]): void {
     if (incoming.length === 0) return;
     this._events.update((current) => {
+      // Dedup against existing events AND within the incoming batch itself — a
+      // single tick can legitimately produce two events that collapse to the
+      // same key (same tick/type/party/system), and duplicate keys would break
+      // @for tracking (NG0955) downstream.
       const seen = new Set(current.map(eventKey));
-      const toAdd = incoming.filter((e) => !seen.has(eventKey(e)));
+      const toAdd: PublicEvent[] = [];
+      for (const e of incoming) {
+        const k = eventKey(e);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        toAdd.push(e);
+      }
       if (toAdd.length === 0) return current;
       const merged = [...current, ...toAdd].sort(
         (a, b) => a.tick - b.tick || a.type.localeCompare(b.type),

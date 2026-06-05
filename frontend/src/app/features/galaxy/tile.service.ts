@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { DemoModeService } from '../../services/demo-mode.service';
 import type { WorldBbox } from '../../stores';
 import {
   normalizeBrightness,
@@ -284,6 +285,7 @@ export function toRenderAggregates(t: AggregateTileDto): RenderAggregate[] {
 @Injectable({ providedIn: 'root' })
 export class TileService {
   private readonly http = inject(HttpClient);
+  private readonly demo = inject(DemoModeService);
 
   /**
    * Bounded LRU keyed by quadkey (seed/level/x/y) of resolved-payload promises.
@@ -328,6 +330,15 @@ export class TileService {
   }
 
   fetchTile(seed: string, addr: TileAddress): Promise<TilePayloadDto> {
+    // Offline/demo galaxy: synthesise the tile from the in-process demo world
+    // instead of hitting the backend, so the renderer has stars (and active
+    // systems) with zero network. No-op when demo mode is inactive.
+    if (this.demo.isActive()) {
+      const local = this.demo.localTile(seed, addr);
+      if (local) {
+        return Promise.resolve(local);
+      }
+    }
     const k = this.key(seed, addr);
     const hit = this.cache.get(k);
     if (hit) {

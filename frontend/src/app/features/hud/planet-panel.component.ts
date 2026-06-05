@@ -60,60 +60,62 @@ import { SelectionStore } from '../../stores/selection.store';
       display: block;
     }
     .planet-panel {
-      width: 220px;
-      background: rgba(0, 3, 8, 0.88);
-      border: 1px solid rgba(80, 180, 255, 0.22);
-      border-radius: 4px;
-      font-family: 'Courier New', monospace;
+      width: 240px;
+      background: var(--sc-panel);
+      border: 1px solid var(--sc-border);
+      border-radius: var(--rounded-sm);
+      font-family: var(--din-body);
       font-size: 12px;
-      color: #b0d8f0;
+      color: var(--sc-text);
       overflow: hidden;
     }
     .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 6px 10px;
-      background: rgba(80, 180, 255, 0.08);
-      border-bottom: 1px solid rgba(80, 180, 255, 0.12);
+      padding: 7px 10px 6px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--sc-border);
     }
     .panel-title {
-      font-size: 10px;
+      font: 400 10px/1 var(--din-body);
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: rgba(80, 180, 255, 0.6);
+      letter-spacing: 1.6px;
+      color: var(--sc-text-dim);
     }
     .back-btn, .close-btn {
       background: none;
       border: none;
-      color: rgba(80, 180, 255, 0.5);
-      font-size: 15px;
+      color: var(--sc-text-dim);
+      font-size: 14px;
       cursor: pointer;
       padding: 0 2px;
       line-height: 1;
+      transition: color 0.15s;
     }
-    .back-btn:hover, .close-btn:hover { color: #b0d8f0; }
+    .back-btn:hover, .close-btn:hover { color: var(--sc-text); }
     .planet-name {
-      padding: 10px 10px 2px;
-      font-size: 14px;
-      font-weight: bold;
-      color: #e8f4ff;
+      padding: 10px 12px 2px;
+      font: 700 15px/1.1 var(--din-display);
+      text-transform: uppercase;
+      color: var(--sc-text);
+      letter-spacing: 1px;
     }
     .planet-biome {
-      padding: 0 10px 6px;
-      font-size: 11px;
-      color: rgba(80, 180, 255, 0.5);
+      padding: 0 12px 6px;
+      font: 400 11px/1 var(--din-body);
+      color: var(--sc-text-faint);
     }
     .section-label {
-      padding: 6px 10px 3px;
-      font-size: 10px;
+      padding: 6px 12px 3px;
+      font: 400 10px/1 var(--din-body);
       text-transform: uppercase;
-      letter-spacing: 1px;
-      color: rgba(80, 180, 255, 0.45);
-      border-top: 1px solid rgba(80, 180, 255, 0.08);
+      letter-spacing: 1.6px;
+      color: var(--sc-text-dim);
+      border-top: 1px solid var(--sc-border);
     }
     .slot-bar-wrap {
-      padding: 4px 10px 8px;
+      padding: 4px 12px 8px;
     }
     .slot-bar {
       display: flex;
@@ -124,36 +126,36 @@ import { SelectionStore } from '../../stores/selection.store';
     .slot {
       width: 14px;
       height: 8px;
-      border-radius: 1px;
-      background: rgba(80, 180, 255, 0.12);
-      border: 1px solid rgba(80, 180, 255, 0.2);
+      border-radius: 2px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid var(--sc-border);
     }
     .slot--used {
-      background: rgba(74, 214, 160, 0.35);
-      border-color: rgba(74, 214, 160, 0.5);
+      background: rgba(95, 214, 164, 0.28);
+      border-color: rgba(95, 214, 164, 0.5);
     }
     .slot-label {
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.4);
+      font: 400 10px/1 var(--din-body);
+      color: var(--sc-text-faint);
+      font-variant-numeric: tabular-nums;
     }
     .action-surface {
-      padding: 4px 10px 8px;
+      padding: 4px 12px 8px;
     }
     .action-hint {
-      font-size: 11px;
-      color: rgba(80, 180, 255, 0.55);
+      font: 400 11px/1.4 var(--din-body);
+      color: var(--sc-text-dim);
     }
     .action-note {
-      margin-top: 2px;
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.28);
+      margin-top: 3px;
+      font: 400 10px/1.4 var(--din-body);
+      color: var(--sc-text-faint);
       font-style: italic;
     }
     .biome-desc {
-      padding: 2px 10px 10px;
-      font-size: 10px;
-      color: rgba(80, 180, 255, 0.4);
-      line-height: 1.5;
+      padding: 2px 12px 10px;
+      font: 400 10px/1.5 var(--din-body);
+      color: var(--sc-text-faint);
     }
   `],
 })

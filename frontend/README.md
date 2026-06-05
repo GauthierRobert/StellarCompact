@@ -2,6 +2,9 @@
 
 > Before adding code, read `.claude/skills/angular21-signals`, `galaxy-rendering`, `lod-tiling`,
 > `realtime-websocket`, and the specs in `docs/specs/`. Port the camera model from `poc/galaxy-navigator.html`.
+>
+> **UI redesign:** `frontend/DESIGN.md` is the authoritative design system (tokens, type, components)
+> for any HUD/UI redesign work — follow its tokens and the black-and-white-only rule.
 
 Angular 21 standalone + signals + zoneless change detection. No NgModules, no Zone.js.
 

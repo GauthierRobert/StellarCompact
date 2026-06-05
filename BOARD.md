@@ -72,6 +72,12 @@ object-store/CDN tiles.
 | **E7** | Frontend (Angular, canvas PoC port) | 2 | frontend |
 | **E8** | Scale to billions (WebGL2 + tiles + procedural catalog) | 3 | galaxy, frontend, api |
 | **E9** | Progression & spectacle | 4 | all |
+| **E10** | Post-simulation tuning & agent depth | 4 | engine, orchestrator |
+| **E11** | Standalone demo mode & command dashboard | 2.5 | frontend |
+| **E12** | **Kardashev progression & civilization tiers** *(central spine)* | 5 | frontend, engine, balance |
+| **E13** | Empire command pages (planets, fleets, trade, wars, tech) | 5 | frontend |
+| **E14** | Galaxy realism & gamification overhaul | 5 | frontend, galaxy |
+| **E15** | Expanded actions & evolution paths | 5 | engine, orchestrator |
 
 **Critical path:** E0 → E1 → E3 → (E4 ∥ E5 ∥ E6) → E7 → E8 → E9. E2 runs alongside E1.
 Cross-cutting **security-reviewer** pass is required on every card that touches WorldView, agent I/O, or any
@@ -618,6 +624,233 @@ client/agent-visible read (flagged 🔒 below).
   ~2000 wasted resolver slots/hour) with a clear rejection reason, keeping the action log meaningful. Closed
   agent I/O — confirm the rejection path is the single re-prompt → Hold, no fog leak in the reason string.
 - **Done when:** redundant Explore is `Rejected{reason}`; valid first-time Explore still passes; security-reviewer signs off (no hidden-state leak); determinism intact.
+
+---
+
+# E11 — Standalone demo mode & command dashboard  *(Phase 2.5 — frontend-first, no backend)*
+
+> The frontend must be **fully demonstrable standalone** (memory: *frontend-demo-mode*): a living galaxy and
+> rich owner dashboard with no backend. `DemoModeService` runs a thin, deterministic simulation that feeds the
+> *same* signal stores the live STOMP path feeds, so the renderer + HUD are identical whether data is live or demo.
+> Cards already shipped in the in-progress demo branch are recorded here for traceability.
+
+### E11-01 · Demo-mode service + local tile generation
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** `DemoModeService` owns a `DemoWorld` (active systems elevated from the byte-parity catalog generator) and
+  a tick loop that simulates expansion/war/blockade/trade/diplomacy/economy into the faction/overlay/events/empire
+  stores. Synthesises LOD tiles offline so the galaxy renders with no API.
+- **Done when:** the galaxy + dashboard populate with zero backend; deterministic from seed; live STOMP takes precedence.
+
+### E11-02 · Command-bar, empire-rail, standings, event-ticker
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** The HUD dashboard chrome — top command-bar (5-resource ledger + deltas + tick), left empire-rail
+  (minimap, stats, build queue, research, fleets, trade, diplomacy), right standings (leaderboard + victory bar),
+  bottom event-ticker. All signal-driven, no state mutation from the UI.
+- **Done when:** the HUD reflects live demo/match state reactively; design tokens per `frontend/DESIGN.md`.
+
+### E11-03 · Interstellar objects, named sectors, galaxy minimap
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** galaxy-renderer-engineer
+- **Do:** Clickable nebulae/black holes/pulsars/wormholes/asteroid fields/rogue planets/supernova remnants; a named
+  8×8 sector grid; a dashboard minimap with camera viewport. All flow through the `RenderScene` contract
+  (memory: *interstellar-objects-and-sectors*).
+- **Done when:** objects/sectors are hit-testable with detail panels; minimap tracks the camera; bounded by the visible set.
+
+### E11-04 · Spiral-galaxy visual rebuild (art direction)
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** galaxy-renderer-engineer
+- **Do:** The luminous spiral art direction — `NEBULA_FRAG`, zoom-gated objects, ACES tone, additive bloom
+  (memory: *galaxy-visual-rebuild*). Render-only levers; never touch the catalog generator.
+- **Done when:** the galaxy reads as astrophotography; all GPU-side; frame budget held. *(Superseded/extended by E14.)*
+
+---
+
+# E12 — Kardashev progression & civilization tiers  *(NEW — the central spine)* — read `06-technology.md` §6
+
+> **Design intent (user, 2026-06-05).** The **Kardashev scale must be central**: a civilization is measured by the
+> **energy it captures** — Type I (planetary ≈10¹⁶ W), Type II (stellar ≈10²⁶ W, Dyson swarms), Type III
+> (galactic ≈10³⁶ W). Progression is *continuous* (e.g. K=1.43), drives unlocks/victory, and is grounded in real
+> physics + sci-fi (Dyson, Niven's Ringworld, Shkadov/Caplan stellar engines, matrioshka brains, star-lifting,
+> black-hole Penrose/Blandford–Znajek harvesting, Birch planets). **Advanced tech must take far longer than simple
+> tech** — research time scales steeply by tier. Determinism/engine-authority unchanged: tiers are config + state,
+> the resolver stays pure. Frontend (demo) leads; engine cards follow.
+
+### E12-01 · Kardashev model + continuous K-value
+- **Status:** ✅ Done · **Module:** frontend (model) → engine (E12-06) · **Delegate to:** game-balance-designer
+- **Read first:** `docs/game-design/06-technology.md` §6, `docs/game-design/02-economy.md`
+- **Do:** Define `K = (log10(W) − 6) / 10` over captured-energy watts; map to tier bands (0/I/II/III) with named
+  thresholds; a per-faction energy-capture breakdown (planetary grid, orbital collectors, Dyson swarm shells,
+  stellar engines, black-hole tap). Frontend `kardashev.ts` is the reference; engine mirrors it in E12-06.
+- **Done when:** K is continuous + monotone in captured watts; tier bands + next-threshold progress derived; pure.
+
+### E12-02 · Tiered tech tree — advanced tech costs far more *time*
+- **Status:** ✅ Done · **Module:** frontend (tree) → engine config (E12-07) · **Delegate to:** game-balance-designer
+- **Read first:** `06-technology.md`, `engine/.../balance/small-default.json` (tech times)
+- **Do:** A real DAG with **tiers T0..T3 + Ascension K1/K2/K3**, research time growing steeply per tier (e.g.
+  T0≈5t, T1≈12t, T2≈30t, T3≈70t, K-tier 120–400t). Branches: Economy, Expansion, Military, Statecraft, **Ascension**
+  (Kardashev). Prereqs gate the slow tech behind earned progress. Numbers in config.
+- **Done when:** the tree renders with correct prereq gating; advanced nodes visibly take much longer; no flat times.
+
+### E12-03 · Megastructures (multi-stage Kardashev engines)
+- **Status:** ✅ Done · **Module:** frontend → engine (E12-08) · **Delegate to:** game-balance-designer
+- **Do:** Multi-stage wonders that raise captured energy and thus K: **Orbital Solar Lattice** (T-I), **Dyson Swarm
+  → Dyson Sphere** (T-II), **Star Lifter**, **Shkadov/Caplan Stellar Engine**, **Matrioshka Brain**, **Nicoll-Dyson
+  Beam**, **Ringworld**, **Black-Hole Tap**, **Birch Planet** (T-III). Each: 3–5 stages, large alloy/energy cost,
+  long build time, escalating output.
+- **Done when:** megastructures progress by stage, contribute watts to the K-value, and gate on the right Ascension tech.
+
+### E12-04 · Kardashev as a victory / scoring axis
+- **Status:** ✅ Done · **Module:** engine/balance · **Depends on:** E12-01, E1-15 · **Delegate to:** game-balance-designer
+- **Done:** `VictoryKind.ASCENSION` + `VictoryEvaluation.ascension()` — fires when a faction's derived K-tier ≥ `kardashev.ascensionRequiredTier` (params in the `kardashev` block, so the `Victory` record is unchanged). K folds into `Scoring.score()` via `kardashev.scoreWeight` (inert at 0 ⇒ pre-E12 ranking byte-identical). Tests: `VictoryEvaluationTest#ascensionVictoryFiresWhenAFactionReachesTheRequiredKardashevTier`; full 375-test engine suite + golden/replay green.
+- **Do:** Add an **Ascension victory** (first to Type III, or highest K at tick limit) alongside Domination/Economic/
+  Diplomatic/Survival/Wonder; fold K into the weighted score. Config-selectable per match.
+- **Done when:** the Ascension condition fires at its configured K threshold; K contributes to ranking; numbers in config.
+
+### E12-05 · Evolution actions surfaced (build/advance megastructures, star-lift, terraform→ascend)
+- **Status:** ✅ Done (demo) / ☐ engine (E15) · **Module:** frontend → engine · **Delegate to:** game-balance-designer
+- **Do:** Surface the new evolution choices in the dashboard (advance a megastructure stage, begin star-lifting,
+  commit a system to a Dyson swarm). Engine-side closed-Action additions tracked in **E15**.
+- **Done when:** the player can see/queue evolution steps in demo; each maps to a planned sealed Action (E15).
+
+### E12-06 · Engine: per-faction captured-energy + K-value state *(determinism-safe)*
+- **Status:** ✅ Done (engine) · ☐ follow-up (WorldView exposure) · **Module:** engine · **Depends on:** E1-06 · **Delegate to:** game-engine-developer
+- **Done:** `engine.kardashev.KardashevCalculator` — pure `capturedWatts/kValue/tier` **derived** from authoritative
+  state (ACTIVE buildings + megastructures + UNLOCKED techs × config watts) using `K=(log10 W−6)/10`. **Not persisted**
+  on `GameState` ⇒ zero state-hash surface, replay unchanged. Sorted iteration (systems/techs) ⇒ stable float sum.
+  Mirrors frontend `kardashev.ts`. Tests: `KardashevTest` (formula, dyson→Type II, black-hole→Type III, determinism).
+- **Follow-up:** surface K/tier in the orchestrator `WorldView` (add a field to `WorldView` + builder + test) so the
+  live owner view carries it (the demo already shows K; the engine value is computed for victory/scoring today).
+- **Done when:** K accrues deterministically; replay reproduces it tick-for-tick; in the fog-filtered WorldView.
+
+### E12-07 · Engine config: tiered tech times + Ascension branch in balance profiles
+- **Status:** ✅ Done · **Module:** engine/balance · **Depends on:** E1-08 · **Delegate to:** game-balance-designer
+- **Done:** both profiles gained the Ascension chain (`orbitalCollectors`, `dysonTheory`, `starLifting`,
+  `matrioshkaMinds`, `blackHoleForge`, gates `planetaryUnification`/`stellarMastery`/`galacticAscendancy`) in
+  `tech.costs/times/prereqs/unlocks` with **steep times** (small: 12→400t; large ≈2×). `unlocks` gate the
+  megastructure building types (no validator change — reuses `capabilityUnlocked`). Loads + validates; tested by
+  `KardashevTest#advancedTechTakesFarLongerThanSimpleTech` + the existing presence test.
+
+### E12-08 · Engine: megastructure buildings + staged construction
+- **Status:** ✅ Done · **Module:** engine · **Depends on:** E1-08, E12-06 · **Delegate to:** game-engine-developer
+- **Done:** five megastructure `BuildingType`s (`ORBITAL_LATTICE`, `DYSON_SWARM`, `STELLAR_ENGINE`,
+  `MATRIOSHKA_BRAIN`, `BLACK_HOLE_TAP`) built via the **existing `Build` pipeline** (cost/time in `construction.*`,
+  flips to ACTIVE after build time, tech-gated via `tech.unlocks`). "Staging" = the sequence of ever-larger
+  types. They produce no economy resource (`EconomyResolution.outputOf → null`) — their value is captured watts
+  (`kardashev.wattsPerBuilding`), read by `KardashevCalculator`. **No resolver/validator change needed.** A single
+  ACTIVE Dyson Swarm → Type II, Black-Hole Tap → Type III (tested). Determinism intact (full reactor green).
+- **Note:** "staged progress within one building" was modelled as a *sequence of building types* rather than a new
+  `Building.stage` field — keeps `GameState`/`Building` record shapes (and the golden hash) unchanged.
+
+---
+
+# E13 — Empire command pages (deep management UX)  *(NEW)* — read `angular21-signals`
+
+> **Design intent (user).** Dedicated pages beyond the galaxy HUD: **see my planets**, a **planet detail page**,
+> **all open trades**, **all open wars**, **all ships and where they are going**, and a **Technology / Kardashev**
+> page. A command-shell with nav hosts them; all read the same signal stores (demo or live).
+
+### E13-01 · Command shell + navigation + routes
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** `CommandShellComponent` (top nav: Galaxy · Overview · Planets · Fleets · Trade · Wars · Technology) hosting
+  a `<router-outlet>`; `/empire`, `/empire/planets`, `/empire/planet/:id`, `/empire/fleets`, `/empire/trade`,
+  `/empire/wars`, `/empire/tech`. Ensures the demo sim is running so stores are fed.
+- **Done when:** nav switches pages; galaxy↔pages round-trip; demo populates every page; zoneless/signals only.
+
+### E13-02 · Empire Overview (Kardashev hero)
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** A hero Kardashev gauge (continuous K + tier + progress to next + energy breakdown), resource ledger,
+  empire stats, active megastructures, headline standings. The "state of my civilization" screen.
+- **Done when:** the Kardashev gauge reads live; breakdown sums to the K-value; links into the deep pages.
+
+### E13-03 · My Planets page
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** All owned planets as sortable/filterable cards (system, biome, size, population/cap, slots used,
+  per-tick yields, specialisation, terraform progress, Kardashev contribution). Click → planet detail.
+- **Done when:** every owned planet is listed with live stats; sort/filter work; selecting opens the detail page.
+
+### E13-04 · Planet Detail page
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** `/empire/planet/:id` — biome + terraform chain, population graph, build-slot grid (buildings + tiers +
+  what could be built), yields breakdown, orbital megastructure (if any), Kardashev contribution.
+- **Done when:** the detail page renders a real planet from the store by id; slot grid + yields are live.
+
+### E13-05 · Fleets & Movements page
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** Every fleet: composition (ship classes + counts), strength, **origin → destination with ETA + progress
+  bar**, mission (patrol/invade/escort/explore/reinforce), and a small lane diagram of in-transit fleets.
+- **Done when:** all ships and where they are going are visible; in-transit fleets show ETA + animated progress.
+
+### E13-06 · Trades & Markets page
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** All open trade agreements + standing offers (partner, goods flow, balance/tick, status), plus the open
+  galactic market top-of-book and your route throughput. The "all open trade" screen.
+- **Done when:** every open trade + market line is listed with live balances; strained/pending flagged.
+
+### E13-07 · Wars & Fronts page
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** All active wars: enemy, since-tick, war-score, contested **fronts** (systems + intensity), engaged fleets,
+  battle log. The "all open war" screen.
+- **Done when:** every active war is listed with its fronts + recent battles; war-score reads live.
+
+### E13-08 · Technology & Kardashev page (centerpiece)
+- **Status:** ✅ Done · **Module:** frontend · **Delegate to:** frontend-developer
+- **Do:** The full tiered tech DAG (branch columns, prereq lines, tier bands, **research-time per node**), the
+  Ascension/Kardashev ladder with the live K-gauge front-and-centre, and the megastructure roster. Makes the
+  "advanced tech takes longer" rule legible at a glance.
+- **Done when:** the tree shows tiers/prereqs/times; the Kardashev ladder + gauge are central; megastructures listed.
+
+---
+
+# E14 — Galaxy realism & gamification overhaul  *(NEW)* — read `galaxy-rendering`, `procedural-galaxy`
+
+> **Design intent (user).** The galaxy board must look **far more realistic** (grounded in astrophysics),
+> **bug-free**, and **more gamified**. Render-only levers + the existing `RenderScene` contract — never iterate or
+> mutate the catalog; determinism/scale discipline hold.
+
+### E14-01 · Astrophysical realism pass
+- **Status:** ☐ Todo · **Module:** frontend · **Delegate to:** galaxy-renderer-engineer
+- **Do:** Truer spiral structure (logarithmic arms + pitch angle + bar), dust-lane extinction, HII-region pink
+  emission knots along arms, blackbody star colour from temperature, halo globular dimming, realistic core bulge
+  falloff. Tune bloom/tone (ACES) so bright cores don't clip. All GPU-side, bounded by the viewport.
+- **Done when:** the galaxy reads like a real barred spiral photograph; no popping; frame budget held.
+
+### E14-02 · Gamification & readability overlays
+- **Status:** ☐ Todo · **Module:** frontend · **Delegate to:** galaxy-renderer-engineer
+- **Do:** Crisper ownership **borders** (not just glows), animated **fleet movement trails** along lanes, capital
+  crowns/home markers, contested-front pulse, objective/victory pings, a Kardashev tint for high-K systems, hover
+  affordances. Keep fog-correct (overlay store only).
+- **Done when:** factions/fronts/fleets read instantly; live fleet motion is visible; all fog-correct.
+
+### E14-03 · Renderer bug-sweep + perf hardening
+- **Status:** ☐ Todo · **Module:** frontend · **Delegate to:** galaxy-renderer-engineer
+- **Do:** Sweep the canvas/WebGL layers for artefacts (LOD cross-fade seams, label collisions, hit-test drift at
+  extreme zoom, DPR scaling, route z-order), add fallbacks, bound per-frame work.
+- **Done when:** no visible artefacts across zoom tiers on WebGL2 + canvas fallback; documented in the spec.
+
+---
+
+# E15 — Expanded actions & evolution paths  *(NEW — engine, determinism-gated)* — read `game-engine-determinism`
+
+> **Design intent (user).** "Add other action possibilities or evolution possibilities." New closed-`Action`
+> variants extend the sealed set; **every addition is forward-compatible and re-validates determinism** (golden
+> hashes, exhaustive switch, one re-prompt → Hold). Spec (`agent-io-schema.md`) updates **before** code (rule #7).
+
+### E15-01 · Action schema additions (Ascension + logistics)
+- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E1-02 · **Delegate to:** game-engine-developer · 🔒
+- **Do:** Add sealed variants for the evolution layer — e.g. `BuildMegastructure`, `AdvanceMegastructure`,
+  `StarLift`, `CommitDysonSwarm`, `Ascend` (claim a Kardashev tier), plus logistics (`SplitFleet`, `MergeFleet`,
+  `Reinforce`). Update `schemaVersion`; keep `UnknownAction` forward-compat; exhaustive switch must still compile.
+- **Done when:** new variants parse + validate; security-reviewer signs off; golden round-trip + exhaustive-switch tests pass.
+
+### E15-02 · Validation + resolver handlers for new actions
+- **Status:** ☐ Todo · **Module:** engine · **Depends on:** E15-01, E12-08 · **Delegate to:** game-engine-developer
+- **Do:** Per-variant `Valid|Rejected{reason}` (tech prereq, ownership, resources, stage gating) + resolver steps in
+  the fixed order; escrowed spends; events for megastructure completion / ascension.
+- **Done when:** each new action has accept + reject tests; resolver stays single-threaded/pure; replay-identical.
+
+### E15-03 · Scripted-bot evolution behaviour
+- **Status:** ☐ Todo · **Module:** orchestrator · **Depends on:** E15-02 · **Delegate to:** agent-runtime-developer
+- **Do:** Teach an `AscendantScriptedSovereign` to climb the Kardashev ladder (research Ascension → build → advance
+  megastructures → ascend), so the headless harness exercises the new path to an Ascension victory.
+- **Done when:** a headless match reaches Type II+/Ascension victory deterministically; replayable.
 
 ---
 

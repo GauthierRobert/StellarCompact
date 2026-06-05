@@ -285,6 +285,9 @@ final class EconomyResolution {
             case RESEARCH_LAB -> OutputResource.TECH;
             case MONUMENT -> OutputResource.INFLUENCE;
             case MARKET_HUB, SHIPYARD, DEFENSE_PLATFORM, TERRAFORMER -> null;
+            // E12 Kardashev megastructures yield captured watts (KardashevCalculator),
+            // not an ordinary economy resource — they produce nothing here.
+            case ORBITAL_LATTICE, DYSON_SWARM, STELLAR_ENGINE, MATRIOSHKA_BRAIN, BLACK_HOLE_TAP -> null;
         };
     }
 

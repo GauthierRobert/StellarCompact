@@ -1,0 +1,12 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e7]: ◆
+    - navigation
+    - generic [ref=e8]:
+      - generic:
+        - generic "Energy"
+        - generic "Minerals"
+        - generic "Credits"
+        - generic "Influence"
+      - generic [ref=e10]: Galaxy ↗
+  - main [ref=e11]
